@@ -5,3 +5,4 @@
 *.wad
 .svn/
 *.suo
+*.dbg
