@@ -1,0 +1,26 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 10.00
+# Visual Studio 2008
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GLDOOM", "GLDOOM.vcproj", "{96463A51-F7AC-46C4-8DF7-050C0EA3681F}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "wadbuild", "wadbuild\wadbuild.vcproj", "{BEB95F61-E346-4665-8732-E8907AC08607}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{96463A51-F7AC-46C4-8DF7-050C0EA3681F}.Debug|Win32.ActiveCfg = Debug|Win32
+		{96463A51-F7AC-46C4-8DF7-050C0EA3681F}.Debug|Win32.Build.0 = Debug|Win32
+		{96463A51-F7AC-46C4-8DF7-050C0EA3681F}.Release|Win32.ActiveCfg = Release|Win32
+		{96463A51-F7AC-46C4-8DF7-050C0EA3681F}.Release|Win32.Build.0 = Release|Win32
+		{BEB95F61-E346-4665-8732-E8907AC08607}.Debug|Win32.ActiveCfg = Debug|Win32
+		{BEB95F61-E346-4665-8732-E8907AC08607}.Debug|Win32.Build.0 = Debug|Win32
+		{BEB95F61-E346-4665-8732-E8907AC08607}.Release|Win32.ActiveCfg = Release|Win32
+		{BEB95F61-E346-4665-8732-E8907AC08607}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
