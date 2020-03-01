@@ -407,7 +407,7 @@ void R_InitSpriteDefs (char** namelist)
         SprData[i].Permanent = false;
         SprData[i].Translucent = 255;
         SprData[i].Intensity = 0;
-        //SprData[i].Translucent = AlphaValue[i];
+        SprData[i].Translucent = AlphaValue[i];
        }
 	
     // scan all the lump names for each of the names,
@@ -442,7 +442,7 @@ void R_InitSpriteDefs (char** namelist)
                 else
                     patched = l;
 
-                //SprData[l-(start+1)].Translucent = AlphaValue[i];
+                SprData[l-(start+1)].Translucent = AlphaValue[i];
 
                 R_InstallSpriteLump (patched, frame, rotation, false);
 
