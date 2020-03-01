@@ -28,7 +28,6 @@ rcsid[] = "$Id: p_setup.c,v 1.5 1997/02/03 22:45:12 b1 Exp $";
 #include <windows.h>
 #include <gl/gl.h>
 #include <gl/glu.h>
-#include <malloc.h>
 #include <math.h>
 
 #include "z_zone.h"
@@ -55,6 +54,8 @@ rcsid[] = "$Id: p_setup.c,v 1.5 1997/02/03 22:45:12 b1 Exp $";
 #include "gconsole.h"
 #include "doomlib.h"
 #include "mathlib.h"
+
+#include "memory.h"
 
 void lfprintf(char *message, ... );
 
@@ -3291,97 +3292,98 @@ dboolean CheckSectionLines(int sector, int section)
        }
    }
 
+
 void MakeSectionFloor(int sector, int section)
-   {
+{
     int           i, cline = -1, lines = 0;
     float         fh;
+    DW_FloorCeil *pfloor;
 
-    fh = (float)(sectors[sector].floorheight >> FRACBITS);
+    pfloor = flats[sector].Floor + flats[sector].fcount;
+    fh     = (float)(sectors[sector].floorheight >> FRACBITS);
 
-    flats[sector].Floor[flats[sector].fcount].PCount = slines[section].lines; // Set the point count
-    flats[sector].Floor[flats[sector].fcount].Point = (DW_Vertex3Dv *)malloc(sizeof(DW_Vertex3Dv)*slines[section].lines);
-    memset(flats[sector].Floor[flats[sector].fcount].Point, 0, sizeof(DW_Vertex3Dv)*slines[section].lines);
-    flats[sector].Floor[flats[sector].fcount].Sector = sector;
+    pfloor->PCount = slines[section].lines; // Set the point count
+    pfloor->Sector = sector;
+    pfloor->Point  = (DW_Vertex3Dv *)malloc(sizeof(DW_Vertex3Dv) * pfloor->PCount);
+    ZeroMemory(pfloor->Point, sizeof(DW_Vertex3Dv) * pfloor->PCount);
 
     i = 0;
     cline = slines[section].first;
 
-    flats[sector].Floor[flats[sector].fcount].Point[i].v[0] = bsplines[cline].v[0].x;
-    flats[sector].Floor[flats[sector].fcount].Point[i].v[1] = fh;
-    flats[sector].Floor[flats[sector].fcount].Point[i].v[2] = bsplines[cline].v[0].y;
+    pfloor->Point[i].v[0] = bsplines[cline].v[0].x;
+    pfloor->Point[i].v[1] = fh;
+    pfloor->Point[i].v[2] = bsplines[cline].v[0].y;
     i++;
     do
-       {
+    {
         cline = bsplines[cline].prev;
         if (cline == -1)
-           {
             break;
-           }
+
         if (i >= slines[section].lines)
-           {
             lfprintf("Oops...\n");
-           }
-        flats[sector].Floor[flats[sector].fcount].Point[i].v[0] = bsplines[cline].v[0].x;
-        flats[sector].Floor[flats[sector].fcount].Point[i].v[1] = fh;
-        flats[sector].Floor[flats[sector].fcount].Point[i].v[2] = bsplines[cline].v[0].y;
+
+        pfloor->Point[i].v[0] = bsplines[cline].v[0].x;
+        pfloor->Point[i].v[1] = fh;
+        pfloor->Point[i].v[2] = bsplines[cline].v[0].y;
         i++;
-       }
+    }
     while (i < slines[section].lines);
 
     if (cline == -1) // abort this
-       {
-        free(flats[sector].Floor[flats[sector].fcount].Point);
-        flats[sector].Floor[flats[sector].fcount].Point = NULL;
-        flats[sector].Floor[flats[sector].fcount].PCount = 0;
+    {
+        ZFREE(pfloor->Point);
+        pfloor->PCount = 0;
         return;
-       }
-   }
+    }
+}
+
 
 void MakeSectionCeiling(int sector, int section)
-   {
+{
     int           i, cline = -1, lines = 0;
     float         ch;
+    DW_FloorCeil* pceil;
 
-    ch = (float)(sectors[sector].ceilingheight >> FRACBITS);
+    pceil = flats[sector].Ceiling + flats[sector].ccount;
+    ch    = (float)(sectors[sector].ceilingheight >> FRACBITS);
 
-    flats[sector].Ceiling[flats[sector].ccount].PCount = slines[section].lines;                 // Set the point count
-    flats[sector].Ceiling[flats[sector].ccount].Point = (DW_Vertex3Dv *)malloc(sizeof(DW_Vertex3Dv)*slines[section].lines);
-    memset(flats[sector].Ceiling[flats[sector].ccount].Point, 0, sizeof(DW_Vertex3Dv)*slines[section].lines);
-    flats[sector].Ceiling[flats[sector].ccount].Sector = sector;
+    pceil->PCount = slines[section].lines;                 // Set the point count
+    pceil->Sector = sector;
+    pceil->Point  = (DW_Vertex3Dv *)malloc(sizeof(DW_Vertex3Dv) * pceil->PCount);
+    ZeroMemory(pceil->Point, sizeof(DW_Vertex3Dv) * pceil->PCount);
 
     cline = slines[section].first;
     i = 0;
 
-    flats[sector].Ceiling[flats[sector].ccount].Point[i].v[0] = bsplines[cline].v[0].x;
-    flats[sector].Ceiling[flats[sector].ccount].Point[i].v[1] = ch;
-    flats[sector].Ceiling[flats[sector].ccount].Point[i].v[2] = bsplines[cline].v[0].y;
+    pceil->Point[i].v[0] = bsplines[cline].v[0].x;
+    pceil->Point[i].v[1] = ch;
+    pceil->Point[i].v[2] = bsplines[cline].v[0].y;
     i++;
     do
-       {
+    {
         cline = bsplines[cline].next;
         if (cline == -1)
-           {
             break;
-           }
+
         if (i >= slines[section].lines)
-           {
             lfprintf("Oops...\n");
-           }
-        flats[sector].Ceiling[flats[sector].ccount].Point[i].v[0] = bsplines[cline].v[0].x;
-        flats[sector].Ceiling[flats[sector].ccount].Point[i].v[1] = ch;
-        flats[sector].Ceiling[flats[sector].ccount].Point[i].v[2] = bsplines[cline].v[0].y;
+
+        pceil->Point[i].v[0] = bsplines[cline].v[0].x;
+        pceil->Point[i].v[1] = ch;
+        pceil->Point[i].v[2] = bsplines[cline].v[0].y;
         i++;
-       }
+    }
     while (i < slines[section].lines);
 
     if (cline == -1) // abort this
-       {
-        free(flats[sector].Ceiling[flats[sector].ccount].Point);
-        flats[sector].Ceiling[flats[sector].ccount].Point = NULL;
-        flats[sector].Ceiling[flats[sector].ccount].PCount = 0;
+    {
+        ZFREE(pceil->Point);
+        pceil->PCount = 0;
         return;
-       }
-   }
+    }
+}
+
 
 void AlignVertices()
    {
@@ -3462,131 +3464,125 @@ void CreateNewFlats()
     static int          seg;
     static bspvert_t    v[2];
     static linelist_t  *linelist;
+    static flats_t     *pflat;
+    static sector_t    *psector;
+    static line_t      *pline;
+    static side_t      *pside1, *pside2;
+    static RECT        *pbbox;
+    static section_t   *psection;
     int                 sections, v1x, v2x, v1y, v2y, v1, v2;
 
     // Free up what we allocated for the previous level...
-    if (flats != 0)
-       {
-        for (sector = 0; sector < lastsectors; sector++)
-           {
-            for (fc = 0; fc < flats[sector].fcount; fc++)
-               {
-                if (flats[sector].Floor != 0)
-                   {
-                    if (flats[sector].Floor[fc].Point != 0)
-                       {
-                        free(flats[sector].Floor[fc].Point);
-                       }
-                   }
-               }
-            for (cc = 0; cc < flats[sector].ccount; cc++)
-               {
-                if (flats[sector].Ceiling != 0)
-                   {
-                    if (flats[sector].Ceiling[cc].Point != 0)
-                       {
-                        free(flats[sector].Ceiling[cc].Point);
-                       }
-                   }
-               }
-            if (flats[sector].Floor != 0)
-               {
-                free(flats[sector].Floor);
-                flats[sector].Floor = 0;
-               }
-            if (flats[sector].Ceiling != 0)
-               {
-                free(flats[sector].Ceiling);
-                flats[sector].Ceiling = 0;
-               }
-           }
-         free(flats);
-         flats = 0;
+    if (flats != NULL)
+    {
+        for (sector = 0, pflat = flats; sector < lastsectors; sector++, pflat++)
+        {
+            if (pflat->Floor != NULL)
+            {
+                for (fc = 0; fc < pflat->fcount; fc++)
+                    FREE(pflat->Floor[fc].Point);
+
+                FREE(pflat->Floor);
+            }
+
+            if (pflat->Ceiling != NULL)
+            {
+                for (cc = 0; cc < pflat->ccount; cc++)
+                    FREE(pflat->Ceiling[cc].Point);
+
+                FREE(pflat->Ceiling);
+            }
+
         }
+
+        ZFREE(flats);
+    }
 
     flats = (flats_t *)malloc(sizeof(flats_t)*numsectors);
 
 #ifdef WDEBUG
     lfprintf( "Number of sectors = %d\n", numsectors);
 #endif
-    //for (sector = 125; sector < 126; sector++) // For each sector...
-    for (sector = 0; sector < numsectors; sector++) // For each sector...
-       {
+
+    for (sector = 0, psector = sectors; sector < numsectors; sector++, psector++) // For each sector...
+    {
         scount = 1;
         sections = 0;
-        if ((sectors[sector].floorpic == skyflatnum) && (sectors[sector].ceilingpic == skyflatnum))
+
+        if ((psector->floorpic == skyflatnum) && (psector->ceilingpic == skyflatnum))
            continue;
 
 #ifdef WDEBUG
         lfprintf( "Processing sector %d flats\n", sector);
 #endif
 
-        SectorBBox[sector].left = SectorBBox[sector].bottom =  32767;
-        SectorBBox[sector].top = SectorBBox[sector].right = -32767;
+        pbbox = SectorBBox + sector;
+        pbbox->left = pbbox->bottom =  32767;
+        pbbox->top  = pbbox->right  = -32767;
 
         lcount = 0;
         bvcount = 0;
         // Build a line list for this sector...
-        for (line = 0; line < numlines; line++)
-           {
-            side1 = lines[line].sidenum[0];
-            side2 = lines[line].sidenum[1];
+        for (line = 0, pline = lines; line < numlines; line++, pline++)
+        {
+            pside1 = sides + pline->sidenum[0];
+            pside2 = sides + pline->sidenum[1];
+
             // ignore trip lines...
-            if (sides[side1].sectornumb == sides[side2].sectornumb)
+            if (pside1->sectornumb == pside2->sectornumb)
                 continue;
 
             // If the sector of sidedef 1 or  sidedef 2 of this line equals this sector, we'll use it...
-            if ((sides[side1].sectornumb == sector) ||
-                (sides[side2].sectornumb == sector))
-               {
-                v1x = (lines[line].v1->x >> FRACBITS);
-                v1y = (lines[line].v1->y >> FRACBITS)*-1;
-                v2x = (lines[line].v2->x >> FRACBITS);
-                v2y = (lines[line].v2->y >> FRACBITS)*-1;
-                if (SectorBBox[sector].left > v1x)
-                    SectorBBox[sector].left = v1x;
-                if (SectorBBox[sector].bottom > v1y)
-                    SectorBBox[sector].bottom = v1y;
-                if (SectorBBox[sector].left > v2x)
-                    SectorBBox[sector].left = v2x;
-                if (SectorBBox[sector].bottom > v2y)
-                    SectorBBox[sector].bottom = v2y;
-                if (SectorBBox[sector].right < v1x)
-                    SectorBBox[sector].right = v1x;
-                if (SectorBBox[sector].top < v1y)
-                    SectorBBox[sector].top = v1y;
-                if (SectorBBox[sector].right < v2x)
-                    SectorBBox[sector].right = v2x;
-                if (SectorBBox[sector].top < v2y)
-                    SectorBBox[sector].top = v2y;
+            if ((pside1->sectornumb == sector) || (pside2->sectornumb == sector))
+            {
+                v1x = (pline->v1->x >> FRACBITS);
+                v1y = (pline->v1->y >> FRACBITS)*-1;
+                v2x = (pline->v2->x >> FRACBITS);
+                v2y = (pline->v2->y >> FRACBITS)*-1;
+
+                if (pbbox->left > v1x)
+                    pbbox->left = v1x;
+                if (pbbox->bottom > v1y)
+                    pbbox->bottom = v1y;
+                if (pbbox->left > v2x)
+                    pbbox->left = v2x;
+                if (pbbox->bottom > v2y)
+                    pbbox->bottom = v2y;
+                if (pbbox->right < v1x)
+                    pbbox->right = v1x;
+                if (pbbox->top < v1y)
+                    pbbox->top = v1y;
+                if (pbbox->right < v2x)
+                    pbbox->right = v2x;
+                if (pbbox->top < v2y)
+                    pbbox->top = v2y;
 
                 // We render "anti-clockwise"...
-                if (sides[side1].sectornumb == sector)
-                   {
+                if (pside1->sectornumb == sector)
+                {
                     v[0].x = (float)v1x;
                     v[0].y = (float)v1y;
                     v[1].x = (float)v2x;
                     v[1].y = (float)v2y;
-                   }
+                }
                 else
-                   {
+                {
                     v[0].x = (float)v2x;
                     v[0].y = (float)v2y;
                     v[1].x = (float)v1x;
                     v[1].y = (float)v1y;
-                   }
+                }
+
                 if ((v1 = FindVertex(v[0].x, v[0].y)) == -1)
-                   {
                     v1 = AddVertex(v[0].x, v[0].y);
-                   }
+
                 if ((v2 = FindVertex(v[1].x, v[1].y)) == -1)
-                   {
                     v2 = AddVertex(v[1].x, v[1].y);
-                   }
+
                 AddNewLine( &v[0], &v[1], v1, v2, sector );
                 bsplines[lcount-1].line = line;
-               }
-           }
+            }
+        }
         // BSP the sector and create the sections...
         //scount = 1;
 //        lfprintf("Sector line list:\n");
@@ -3671,52 +3667,54 @@ void CreateNewFlats()
 #endif
         //AlignVertices();
 
-        flats[sector].Floor = 0;
-        flats[sector].Ceiling = 0;
-        flats[sector].fcount = 0;
-        flats[sector].ccount = 0;
-        flats[sector].Floor = (DW_FloorCeil *)malloc(sizeof(DW_FloorCeil)*scount);
-        memset(flats[sector].Floor, 0, sizeof(DW_FloorCeil)*scount);
-        flats[sector].Ceiling = (DW_FloorCeil *)malloc(sizeof(DW_FloorCeil)*scount);
-        memset(flats[sector].Ceiling, 0, sizeof(DW_FloorCeil)*scount);
+        pflat = flats + sector;
+
+        pflat->Floor   = NULL;
+        pflat->Ceiling = NULL;
+        pflat->fcount  = 0;
+        pflat->ccount  = 0;
+        pflat->Floor = (DW_FloorCeil *)malloc(sizeof(DW_FloorCeil)*scount);
+        ZeroMemory(pflat->Floor, sizeof(DW_FloorCeil)*scount);
+        pflat->Ceiling = (DW_FloorCeil *)malloc(sizeof(DW_FloorCeil)*scount);
+        ZeroMemory(pflat->Ceiling, sizeof(DW_FloorCeil)*scount);
+
         sections = 0;
-        for (section = 0; section < scount; section++)
-           {
+        for (section = 0, psection = slines; section < scount; section++, psection++)
+        {
 //            lfprintf("\nJoin Colinear Segments\n\n");
             JoinColinearSegs(sector, section);
-            slines[section].lines = 0;
+            psection->lines = 0;
 //            lfprintf("\nFind forward chains for section\n\n");
             ChainSectionForward(sector, section);
             if (CheckSectionLines(sector, section) == true)
-               {
+            {
                 sections++;
-                if ((sectors[sector].floorpic != skyflatnum) && (slines[section].lines > 2))
-                   {
+                if ((psector->floorpic != skyflatnum) && (psection->lines > 2))
+                {
 //                    lfprintf("\nMake section floor\n\n");
                     MakeSectionFloor(sector, section);
-                    flats[sector].fcount++;
-                   }
-                if ((sectors[sector].ceilingpic != skyflatnum) && (slines[section].lines > 2))
-                   {
+                    pflat->fcount++;
+                }
+                if ((psector->ceilingpic != skyflatnum) && (psection->lines > 2))
+                {
 //                    lfprintf("\nMake section ceiling\n\n");
                     MakeSectionCeiling(sector, section);
-                    flats[sector].ccount++;
-                   }
-               }
-           }
+                    pflat->ccount++;
+                }
+            }
+        }
         //lfprintf("Sector %d number of bverts: %d\n", sector, bvcount);
-       }
+    }
     //free(linelist);
     //free(flats);
-    if (DrawFlat != 0)
-        free(DrawFlat);
+    ZFREE(DrawFlat);
+
     DrawFlat = (dboolean *)malloc(sizeof(dboolean)*numsectors);
     for (sector = 0; sector < numsectors; sector++)
-       {
         DrawFlat[sector] = false;
-       }
+
     lastsectors = numsectors;
-   }
+}
 
 
 void Build3DLevel()
