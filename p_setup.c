@@ -3526,14 +3526,14 @@ void CreateNewFlats()
         for (line = 0, pline = lines; line < numlines; line++, pline++)
         {
             pside1 = sides + pline->sidenum[0];
-            pside2 = sides + pline->sidenum[1];
+            pside2 = (pline->sidenum[1] != -1) ? (sides + pline->sidenum[1]) : NULL;
 
             // ignore trip lines...
-            if (pside1->sectornumb == pside2->sectornumb)
+            if (pside2 != NULL && pside1->sectornumb == pside2->sectornumb)
                 continue;
 
             // If the sector of sidedef 1 or  sidedef 2 of this line equals this sector, we'll use it...
-            if ((pside1->sectornumb == sector) || (pside2->sectornumb == sector))
+            if ((pside1->sectornumb == sector) || (pside2 != NULL && pside2->sectornumb == sector))
             {
                 v1x = (pline->v1->x >> FRACBITS);
                 v1y = (pline->v1->y >> FRACBITS)*-1;
