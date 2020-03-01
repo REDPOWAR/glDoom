@@ -3331,6 +3331,8 @@ void MakeSectionFloor(int sector, int section)
     if (cline == -1) // abort this
        {
         free(flats[sector].Floor[flats[sector].fcount].Point);
+        flats[sector].Floor[flats[sector].fcount].Point = NULL;
+        flats[sector].Floor[flats[sector].fcount].PCount = 0;
         return;
        }
    }
@@ -3375,6 +3377,8 @@ void MakeSectionCeiling(int sector, int section)
     if (cline == -1) // abort this
        {
         free(flats[sector].Ceiling[flats[sector].ccount].Point);
+        flats[sector].Ceiling[flats[sector].ccount].Point = NULL;
+        flats[sector].Ceiling[flats[sector].ccount].PCount = 0;
         return;
        }
    }
