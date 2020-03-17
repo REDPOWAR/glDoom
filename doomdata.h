@@ -265,13 +265,13 @@ typedef struct DW_FloorCeil
     int                  Sector;
    }DW_FloorCeil;
 
+
 typedef struct
-   {
-    int            fcount;
-    DW_FloorCeil  *Floor;
-    int            ccount;
-    DW_FloorCeil  *Ceiling;
-   }flats_t;
+{
+    DW_FloorCeil*  subsectors;
+    int            ss_count;
+}sector_plane_t;
+
 
 typedef struct
    {

@@ -1187,15 +1187,15 @@ void GL_DrawSky(float compass)
     glPopMatrix();
    }
 
-extern DW_TexList    TexList[1024];
+extern DW_TexList      TexList[1024];
 
-extern flats_t      *flats;
-extern int           translate[1024];
-extern int           ftranslate[1024];
-extern DW_Polygon   *PolyList;
-extern DW_FloorCeil *FloorList, *CeilList;
-extern drawside_t   *DrawSide;
-extern dboolean         *DrawFlat;
+extern sector_plane_t *planes;
+extern int             translate[1024];
+extern int             ftranslate[1024];
+extern DW_Polygon     *PolyList;
+extern DW_FloorCeil   *FloorList, *CeilList;
+extern drawside_t     *DrawSide;
+extern dboolean       *DrawFlat;
 
 extern dboolean RedBias, GreenBias, WhiteBias;
 
@@ -1877,9 +1877,57 @@ void R_BuildRenderQueue()
        }
    }
 
+
+void DrawPartitionLine(node_t* pnode)
+{
+    /*float x1, y1, x2, y2;
+
+    x1 = pnode->x >> FRACBITS;
+    y1 = -1 * (pnode->y >> FRACBITS);
+    x2 = (pnode->x + pnode->dx) >> FRACBITS;
+    y2 = -1 * ((pnode->y + pnode->dy) >> FRACBITS);
+
+    glDisable(GL_TEXTURE_2D);
+    glColor3f(1.0f, 0.0, 1.0f);
+    glBegin(GL_LINES);
+    glVertex3f(x1, 0.0, y1);
+    glVertex3f(x2, 0.0, y2);
+    glEnd(GL_LINES);
+    glEnable(GL_TEXTURE_2D);
+    glColor3f(1.0f, 1.0f, 1.0f);
+
+    if ((pnode->children[0] & 0x8000) == 0)
+        DrawPartitionLine(nodes + pnode->children[0]);
+
+    if ((pnode->children[1] & 0x8000) == 0)
+        DrawPartitionLine(nodes + pnode->children[1]);*/
+
+    int i;
+
+    glDisable(GL_TEXTURE_2D);
+    glColor3f(1.0f, 0.0, 1.0f);
+    glBegin(GL_LINES);
+    for (i = 0; i < numnodes; i++)
+    {
+        float x1, y1, x2, y2;
+
+        x1 = nodes[i].x >> FRACBITS;
+        y1 = -1 * (nodes[i].y >> FRACBITS);
+        x2 = (nodes[i].x + nodes[i].dx) >> FRACBITS;
+        y2 = -1 * ((nodes[i].y + nodes[i].dy) >> FRACBITS);
+
+        glVertex3f(x1, 0.0, y1);
+        glVertex3f(x2, 0.0, y2);
+    }
+    glEnd(GL_LINES);
+    glEnable(GL_TEXTURE_2D);
+    glColor3f(1.0f, 1.0f, 1.0f);
+}
+
+
 void GL_RenderPlayerView(player_t* player)
    {
-    int           i, iview, texnumb, sector, section;
+    int           i, j, iview, texnumb, sector, subsector, lin;
     float         wallhigh, newhigh;
     double        fview;
     float         yangle, lightv;
@@ -1892,6 +1940,8 @@ void GL_RenderPlayerView(player_t* player)
     DW_Polygon   *TempPoly, LightMap;
     static dboolean   FirstTime = true;
     DW_Vertex3D   LightPos;
+    mobj_t* pobj;
+    DW_FloorCeil* psubsector;
 
     glPushMatrix();
 
@@ -2224,23 +2274,99 @@ void GL_RenderPlayerView(player_t* player)
                     glColor4f( lightv, lightv, lightv, 1.0f );
                    }
                 glBindTexture(GL_TEXTURE_2D, TexList[ftranslate[flattranslation[sectors[sector].floorpic]]].glTexture);
-                for (section = 0; section < flats[sector].fcount; section++)
-                   {
+                for (subsector = 0, psubsector = planes[sector].subsectors; 
+                    subsector < planes[sector].ss_count; 
+                    subsector++, psubsector++)
+                {
                     if ((gl_poffsetf != 0) && (gl_poffsetu != 0))
                        {
                         glEnable(GL_POLYGON_OFFSET_FILL);
                        }
-                    glBegin(GL_POLYGON);
+                    /*glBegin(GL_POLYGON);
                     for (i = 0; i < flats[sector].Floor[section].PCount; i++)
                        {
                         glTexCoord2f( flats[sector].Floor[section].Point[i].tu,flats[sector].Floor[section].Point[i].tv);
                         flats[sector].Floor[section].Point[i].v[1] = flathigh;
                         glVertex3fv(flats[sector].Floor[section].Point[i].v);
                        }
-                    glEnd();
+                    glEnd();*/
                     if ((gl_poffsetf != 0) && (gl_poffsetu != 0))
                        {
+                        int ss, lid;
+                        float fh;
+
                         glDisable(GL_POLYGON_OFFSET_FILL);
+
+                        glDisable(GL_TEXTURE_2D);
+                        glColor3f(1.0f, 1.0f, 0.0);
+
+                        fh = (sectors[sector].floorheight >> FRACBITS);
+                        //for (ss = 0; ss < numsubsectors; ss++)
+                        //{
+                        //    if (subsectors[ss].sector - sectors != sector)
+                        //        continue;
+
+                        //    /*glBegin(GL_POLYGON);
+                        //    for (lid = subsectors[ss].firstline; lid < subsectors[ss].firstline + subsectors[ss].numlines; lid++)
+                        //    {
+                        //        glVertex3f((float)(segs[lid].v1->x >> FRACBITS), fh, (float)((segs[lid].v1->y >> FRACBITS) * -1));
+                        //        glVertex3f((float)(segs[lid].v2->x >> FRACBITS), fh, (float)((segs[lid].v2->y >> FRACBITS) * -1));
+                        //    }
+                        //    glEnd(GL_POLYGON);*/
+
+                        //    glBegin(GL_LINES);
+                        //    for (lid = subsectors[ss].firstline; lid < subsectors[ss].firstline + subsectors[ss].numlines; lid++)
+                        //    {
+                        //        glVertex3f((float)(segs[lid].v1->x >> FRACBITS), fh, (float)((segs[lid].v1->y >> FRACBITS) * -1));
+                        //        glVertex3f((float)(segs[lid].v2->x >> FRACBITS), fh, (float)((segs[lid].v2->y >> FRACBITS) * -1));
+                        //    }
+                        //    glEnd(GL_LINES);
+                        //}
+
+                        /*glBegin(GL_LINES);
+                        for (lid = 0; lid < numsegs; lid++)
+                        {
+                            if (segs[lid].backsector - sectors != sector &&
+                                segs[lid].frontsector - sectors != sector)
+                                continue;
+
+                            glVertex3f((float)(segs[lid].v1->x >> FRACBITS), fh, (float)((segs[lid].v1->y >> FRACBITS) * -1));
+                            glVertex3f((float)(segs[lid].v2->x >> FRACBITS), fh, (float)((segs[lid].v2->y >> FRACBITS) * -1));
+                         
+                        }
+                        glEnd(GL_LINES);*/
+                       /* glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+                        glBegin(GL_LINES);
+                        for (i = 0; i < sectors[sector].linecount; i++)
+                        {
+                            glVertex3f((float)(sectors[sector].lines[i]->v1->x >> FRACBITS), flathigh, (float)((sectors[sector].lines[i]->v1->y >> FRACBITS) * -1));
+                            glVertex3f((float)(sectors[sector].lines[i]->v2->x >> FRACBITS), flathigh, (float)((sectors[sector].lines[i]->v2->y >> FRACBITS) * -1));
+                        }
+
+                        glEnd();
+                        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);*/
+
+                        /*glColor3f(0.0f, 1.0f, 1.0f);
+                        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+                        glBegin(GL_LINES);
+                        for (i = 0; i < numsubsectors; i++)
+                        {
+                            if (subsectors[i].sector - sectors != sector)
+                                continue;
+
+                            for (j = subsectors[i].numlines; j < subsectors[i].numlines + subsectors[i].firstline; j++)
+                            {
+                                glVertex3f((float)(segs[j].v1->x >> FRACBITS), flathigh, (float)((segs[j].v1->y >> FRACBITS) * -1));
+                                glVertex3f((float)(segs[j].v2->x >> FRACBITS), flathigh, (float)((segs[j].v2->y >> FRACBITS) * -1));
+                            }
+
+
+                        }
+
+                        glEnd();
+                        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);*/
+
+                        /*glColor3f(1.0f, 0.0, 0.0);
                         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
                         glBegin(GL_POLYGON);
                         for (i = 0; i < flats[sector].Floor[section].PCount; i++)
@@ -2251,68 +2377,87 @@ void GL_RenderPlayerView(player_t* player)
                            }
                         glEnd();
                         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+                        glPolygonMode(GL_FRONT_AND_BACK, GL_POINT);
+                        glBegin(GL_POINTS);
+                        glColor3f(1.0f, 1.0f, 0.0);
+                        for (i = 0; i < flats[sector].Floor[section].PCount; i++)
+                        {
+                            glTexCoord2f(flats[sector].Floor[section].Point[i].tu, flats[sector].Floor[section].Point[i].tv);
+                            flats[sector].Floor[section].Point[i].v[1] = flathigh;
+                            glVertex3fv(flats[sector].Floor[section].Point[i].v);
+                        }
+                        glEnd();
+                        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);*/
+
+glColor3f(1.0f, 1.0f, 1.0f);
+glEnable(GL_TEXTURE_2D);
                        }
                    }
-               if ((lightv >= foglight)  && (gl_fog == 1))
+                   if ((lightv >= foglight) && (gl_fog == 1))
                    {
-                    glEnable(GL_FOG);
+                       glEnable(GL_FOG);
                    }
                }
-            if (player->viewz < sectors[sector].ceilingheight)
+               if (player->viewz < sectors[sector].ceilingheight)
                {
-                flathigh = (double)sectors[sector].ceilingheight * pfactor;
-                lightv = sectors[sector].lightlevel;
-                lightv /= 255.0f;
-                if ((lightv >= foglight) && (gl_fog == 1))
+                   flathigh = (double)sectors[sector].ceilingheight * pfactor;
+                   lightv = sectors[sector].lightlevel;
+                   lightv /= 255.0f;
+                   if ((lightv >= foglight) && (gl_fog == 1))
                    {
-                    glDisable(GL_FOG);
+                       glDisable(GL_FOG);
                    }
-                if (WhiteBias == true)
+                   if (WhiteBias == true)
                    {
-                    glColor4f( 1.0f, 1.0f, 1.0f, 1.0f );
+                       glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
                    }
-                else
+                   else
                    {
-                    glColor4f( lightv, lightv, lightv, 1.0f );
+                       glColor4f(lightv, lightv, lightv, 1.0f);
                    }
-                glBindTexture(GL_TEXTURE_2D, TexList[ftranslate[flattranslation[sectors[sector].ceilingpic]]].glTexture);
-                for (section = 0; section < flats[sector].ccount; section++)
+                   glBindTexture(GL_TEXTURE_2D, TexList[ftranslate[flattranslation[sectors[sector].ceilingpic]]].glTexture);
+                   for (subsector = 0, psubsector = planes[sector].subsectors;
+                       subsector < planes[sector].ss_count;
+                       subsector++, psubsector++)
                    {
-                    if ((gl_poffsetf != 0) && (gl_poffsetu != 0))
+                       if ((gl_poffsetf != 0) && (gl_poffsetu != 0))
                        {
-                        glEnable(GL_POLYGON_OFFSET_FILL);
+                           glEnable(GL_POLYGON_OFFSET_FILL);
                        }
-                    glBegin(GL_POLYGON);
-                    for (i = 0; i < flats[sector].Ceiling[section].PCount; i++)
+                       glBegin(GL_POLYGON);
+                       for (i = 0; i < psubsector->PCount; i++)
                        {
-                        glTexCoord2f( flats[sector].Ceiling[section].Point[i].tu,flats[sector].Ceiling[section].Point[i].tv);
-                        flats[sector].Ceiling[section].Point[i].v[1] = flathigh;
-                        glVertex3fv(flats[sector].Ceiling[section].Point[i].v);
+                           glTexCoord2f(psubsector->Point[i].tu, psubsector->Point[i].tv);
+                           psubsector->Point[i].v[1] = flathigh;
+                           glVertex3fv(psubsector->Point[i].v);
                        }
-                    glEnd();
-                    if ((gl_poffsetf != 0) && (gl_poffsetu != 0))
+                       glEnd();
+                       if ((gl_poffsetf != 0) && (gl_poffsetu != 0))
                        {
-                        glDisable(GL_POLYGON_OFFSET_FILL);
-                        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-                        glBegin(GL_POLYGON);
-                        for (i = 0; i < flats[sector].Ceiling[section].PCount; i++)
+                           glDisable(GL_POLYGON_OFFSET_FILL);
+                           glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+                           glBegin(GL_POLYGON);
+                           for (i = 0; i < psubsector->PCount; i++)
                            {
-                            glTexCoord2f( flats[sector].Ceiling[section].Point[i].tu,flats[sector].Ceiling[section].Point[i].tv);
-                            flats[sector].Ceiling[section].Point[i].v[1] = flathigh;
-                            glVertex3fv(flats[sector].Ceiling[section].Point[i].v);
+                               glTexCoord2f(psubsector->Point[i].tu, psubsector->Point[i].tv);
+                               psubsector->Point[i].v[1] = flathigh;
+                               glVertex3fv(psubsector->Point[i].v);
                            }
-                        glEnd();
-                        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+                           glEnd();
+                           glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
                        }
                    }
-               if ((lightv >= foglight) && (gl_fog == 1))
+                   if ((lightv >= foglight) && (gl_fog == 1))
                    {
-                    glEnable(GL_FOG);
+                       glEnable(GL_FOG);
                    }
                }
            }
-        DrawFlat[sector] = false;
+           DrawFlat[sector] = false;
        }
+
+       DrawPartitionLine(nodes + numnodes - 1);
 
     if (gl_modeltest)
        {
