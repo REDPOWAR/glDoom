@@ -1919,6 +1919,19 @@ void DrawPartitionLine(node_t* pnode)
         glVertex3f(x1, 0.0, y1);
         glVertex3f(x2, 0.0, y2);
     }
+
+    /*glColor3f(1.0f, 0.0, 0.0f);
+    glVertex3f(0.0, 0.0, 0.0);
+    glVertex3f(100.0f, 0.0, 0.0);
+
+    glColor3f(0.0f, 1.0, 0.0f);
+    glVertex3f(0.0, 0.0, 0.0);
+    glVertex3f(0.0f, 100.0, 0.0);
+
+    glColor3f(0.0f, 0.0, 1.0f);
+    glVertex3f(0.0, 0.0, 0.0);
+    glVertex3f(0.0f, 0.0, 100.0f);*/
+
     glEnd(GL_LINES);
     glEnable(GL_TEXTURE_2D);
     glColor3f(1.0f, 1.0f, 1.0f);
@@ -2274,22 +2287,22 @@ void GL_RenderPlayerView(player_t* player)
                     glColor4f( lightv, lightv, lightv, 1.0f );
                    }
                 glBindTexture(GL_TEXTURE_2D, TexList[ftranslate[flattranslation[sectors[sector].floorpic]]].glTexture);
-                for (subsector = 0, psubsector = planes[sector].subsectors; 
-                    subsector < planes[sector].ss_count; 
-                    subsector++, psubsector++)
+                for (subsector = 0; subsector < planes[sector].ss_count; subsector++)
                 {
+                    psubsector = planes[sector].subsectors[subsector];
+
                     if ((gl_poffsetf != 0) && (gl_poffsetu != 0))
                        {
                         glEnable(GL_POLYGON_OFFSET_FILL);
                        }
-                    /*glBegin(GL_POLYGON);
-                    for (i = 0; i < flats[sector].Floor[section].PCount; i++)
+                    glBegin(GL_POLYGON);
+                    for (i = 0; i < psubsector->PCount; i++)
                        {
-                        glTexCoord2f( flats[sector].Floor[section].Point[i].tu,flats[sector].Floor[section].Point[i].tv);
-                        flats[sector].Floor[section].Point[i].v[1] = flathigh;
-                        glVertex3fv(flats[sector].Floor[section].Point[i].v);
+                        glTexCoord2f(psubsector->Point[i].tu, psubsector->Point[i].tv);
+                        psubsector->Point[i].v[1] = flathigh;
+                        glVertex3fv(psubsector->Point[i].v);
                        }
-                    glEnd();*/
+                    glEnd();
                     if ((gl_poffsetf != 0) && (gl_poffsetu != 0))
                        {
                         int ss, lid;
@@ -2417,10 +2430,10 @@ glEnable(GL_TEXTURE_2D);
                        glColor4f(lightv, lightv, lightv, 1.0f);
                    }
                    glBindTexture(GL_TEXTURE_2D, TexList[ftranslate[flattranslation[sectors[sector].ceilingpic]]].glTexture);
-                   for (subsector = 0, psubsector = planes[sector].subsectors;
-                       subsector < planes[sector].ss_count;
-                       subsector++, psubsector++)
+                   for (subsector = 0; subsector < planes[sector].ss_count; subsector++)
                    {
+                       psubsector = planes[sector].subsectors[subsector];
+
                        if ((gl_poffsetf != 0) && (gl_poffsetu != 0))
                        {
                            glEnable(GL_POLYGON_OFFSET_FILL);
@@ -2457,7 +2470,7 @@ glEnable(GL_TEXTURE_2D);
            DrawFlat[sector] = false;
        }
 
-       DrawPartitionLine(nodes + numnodes - 1);
+       //DrawPartitionLine(nodes + numnodes - 1);
 
     if (gl_modeltest)
        {

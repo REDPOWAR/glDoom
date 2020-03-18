@@ -34,14 +34,12 @@ rcsid[] = "$Id: m_bbox.c,v 1.1 1997/02/03 22:45:10 b1 Exp $";
 #include "m_bbox.h"
 
 
-#define MAXINT 0x7FFFFFFF;
-#define MININT 0x80000000;
-
 void M_ClearBox (fixed_t *box)
 {
-    box[BOXTOP] = box[BOXRIGHT] = MININT;
-    box[BOXBOTTOM] = box[BOXLEFT] = MAXINT;
+    box[BOXTOP]    = box[BOXRIGHT] = FIXED_MIN;
+    box[BOXBOTTOM] = box[BOXLEFT]  = FIXED_MAX;
 }
+
 
 void
 M_AddToBox

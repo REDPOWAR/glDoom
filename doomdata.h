@@ -268,8 +268,8 @@ typedef struct DW_FloorCeil
 
 typedef struct
 {
-    DW_FloorCeil*  subsectors;
-    int            ss_count;
+    DW_FloorCeil**  subsectors;
+    int             ss_count;
 }sector_plane_t;
 
 

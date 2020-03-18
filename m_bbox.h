@@ -46,6 +46,8 @@ M_AddToBox
   fixed_t	x,
   fixed_t	y );
 
+void M_ClearBox(fixed_t* box);
+
 
 #endif
 //-----------------------------------------------------------------------------

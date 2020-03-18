@@ -760,7 +760,8 @@ DW_FloorCeil      *CeilList = 0;
 DW_TexList         TexList[1024];
 int                TexCount;
 
-sector_plane_t    *planes = NULL;
+DW_FloorCeil      *subsector_planes = NULL;
+sector_plane_t    *planes           = NULL;
 
 float InnerProduct(float *f, float *m, float *e)
    {
@@ -1838,13 +1839,287 @@ void CreateNewWalls()
        }
     //lfprintf( "Total generated \"wall\" polygon count: %d\n", PolyCount);
    }
-
-
+   
 //#define WDEBUG 1
 
+
+
+typedef struct
+{
+    double x, y;
+}convex_poly_vert_t;
+
+typedef convex_poly_vert_t vector_t;
+
+
+typedef struct
+{
+    convex_poly_vert_t** verts;
+    int                  vertex_count;
+}convex_poly_t;
+
+
+typedef struct
+{
+    double x, y, dx, dy;
+}partline_t;
+
+
+convex_poly_vert_t* vertex_buffer     = NULL;
+int                 vertex_buffer_len = 0;
+int                 num_used_verts    = 0;
+
+
+void NewConvexPoly(convex_poly_t* poly, int vertex_count)
+{
+    poly->vertex_count = vertex_count;
+    poly->verts        = (convex_poly_vert_t**)malloc(sizeof(convex_poly_vert_t*) * vertex_count);
+}
+
+
+void FreeConvexPoly(convex_poly_t* poly)
+{
+    ZFREE(poly->verts);
+    poly->vertex_count = 0;
+}
+
+
+void CopyConvexPoly(convex_poly_t* pfrom, convex_poly_t* pto)
+{
+    pto->vertex_count = pfrom->vertex_count;
+    if (pfrom->vertex_count > 0)
+        NewConvexPoly(pto, pfrom->vertex_count);
+
+    CopyMemory(pto->verts, pfrom->verts, sizeof(convex_poly_vert_t*) * pfrom->vertex_count);
+}
+
+
+void ClearConvexPolyVertices(void)
+{
+    ZFREE(vertex_buffer);
+    vertex_buffer_len = num_used_verts = 0;
+}
+
+
+convex_poly_vert_t* NewConvexPolyVertex()
+{
+    if(num_used_verts == vertex_buffer_len)
+    { 
+        int new_buffer_len;
+
+        new_buffer_len    = (vertex_buffer_len > 0) ? (vertex_buffer_len * 2) : 100;
+        vertex_buffer     = realloc(vertex_buffer, sizeof(convex_poly_vert_t) * new_buffer_len);
+        vertex_buffer_len = new_buffer_len;
+    }
+
+    return vertex_buffer + num_used_verts++;
+}
+
+
+void NewPartitionLine(partline_t* pline, float x, float y, float dx, float dy)
+{
+    pline->x  = x;
+    pline->y  = y;
+    pline->dx = dx;
+    pline->dy = dy;
+}
+
+
+void NormalizeVector(vector_t* pvec)
+{
+    float invlen = 1.0f / sqrtf(pvec->x * pvec->x + pvec->y * pvec->y);
+
+    pvec->x *= invlen;
+    pvec->y *= invlen;
+}
+
+
+void MakeOrthogonalRightVector(vector_t* pvec, vector_t* pright)
+{
+    pright->x = pvec->y;
+    pright->y = -pvec->x;
+}
+
+
+#define ProjectPoint(v, p)    ((v)->x * (p)->x + (v)->y * (p)->y)
+#define ProjectVector(v1, v2) ProjectPoint(v1, v2)
+#define DotProduct            ProjectVector
+
+
+dboolean IsPointOnRightSide(partline_t* pline, convex_poly_vert_t* pv)
+{
+    return ((pv->x - pline->x) * pline->dy - (pv->y - pline->y) * pline->dx) >= 0;
+}
+
+
+dboolean TestEdgeIntersection(partline_t* pline,
+    convex_poly_vert_t* pv1, convex_poly_vert_t* pv2, convex_poly_vert_t* presult)
+{
+    vector_t            line_vector, line_right, edge_vector;
+    vector_t            edge_start_to_line_start;
+    convex_poly_vert_t  line_start;
+    float               edge_proj, start_proj, lerp;
+
+
+    line_vector.x = pline->dx;
+    line_vector.y = pline->dy;
+    line_start.x  = pline->x;
+    line_start.y  = pline->y;
+    MakeOrthogonalRightVector(&line_vector, &line_right);
+    edge_vector.x = pv2->x - pv1->x;
+    edge_vector.y = pv2->y - pv1->y;
+
+    edge_proj = ProjectVector(&edge_vector, &line_right);
+    if (fabs(edge_proj) < 1.0e-36f)
+        return false;
+
+    edge_start_to_line_start.x = pline->x - pv1->x;
+    edge_start_to_line_start.y = pline->y - pv1->y;
+
+    start_proj = ProjectVector(&edge_start_to_line_start, &line_right);
+
+    lerp = start_proj / edge_proj;
+    if (lerp < 0.0 || lerp > 1.0f)
+        return false;
+
+    presult->x = pv1->x + edge_vector.x * lerp;
+    presult->y = pv1->y + edge_vector.y * lerp;
+
+    return true;
+}
+
+
+dboolean SplitConvexPoly(convex_poly_t* ppoly, 
+    partline_t* pline, convex_poly_t* pleft_poly, convex_poly_t* pright_poly)
+{
+    int                 i, j;
+    dboolean            first_found, second_found;
+    convex_poly_vert_t  result;
+    int                 v_before, v_after;
+    dboolean            begin_on_right_side;
+    convex_poly_vert_t  v1, v2;
+    convex_poly_t      *pcurrent_poly;
+    int                 fill_count;
+
+    if (ppoly->verts == 0)
+        return false;
+
+    first_found  = false;
+    second_found = false;
+
+    for (i = 0; i < ppoly->vertex_count; i++)
+    {
+        j = i + 1;
+
+        if (!TestEdgeIntersection(pline, ppoly->verts[i], 
+            ppoly->verts[j % ppoly->vertex_count], &result))
+            continue;
+
+        if (!first_found)
+        {
+            v_before    = i;
+            v1          = result;
+            first_found = true;
+        }
+        else
+        {
+            v_after      = j;
+            v2           = result;
+            second_found = true;
+            break;
+        }
+    }
+
+    if (!second_found)
+    {
+        if (IsPointOnRightSide(pline, ppoly->verts[0]))
+            CopyConvexPoly(ppoly, pright_poly);
+        else
+            CopyConvexPoly(ppoly, pleft_poly);
+
+        return false;
+    }
+
+    begin_on_right_side = IsPointOnRightSide(pline, ppoly->verts[0]);
+
+    pcurrent_poly = begin_on_right_side ? pright_poly : pleft_poly;
+    NewConvexPoly(pcurrent_poly, (v_before + 1) + (ppoly->vertex_count - v_after) + 2);
+    fill_count = 0;
+    
+    for (i = 0; i <= v_before; i++)
+        pcurrent_poly->verts[fill_count++] = ppoly->verts[i];
+
+    pcurrent_poly->verts[fill_count]    = NewConvexPolyVertex();
+    *pcurrent_poly->verts[fill_count++] = v1;
+    pcurrent_poly->verts[fill_count]    = NewConvexPolyVertex();
+    *pcurrent_poly->verts[fill_count++] = v2;
+
+    for(i = v_after; i < ppoly->vertex_count; i++)
+        pcurrent_poly->verts[fill_count++] = ppoly->verts[i];
+
+    pcurrent_poly = begin_on_right_side ? pleft_poly : pright_poly;
+    NewConvexPoly(pcurrent_poly, (v_after - v_before - 1) + 2);
+    fill_count = 0;
+
+    pcurrent_poly->verts[fill_count]    = NewConvexPolyVertex();
+    *pcurrent_poly->verts[fill_count++] = v1;
+
+    for (i = v_before + 1; i < v_after; i++)
+        pcurrent_poly->verts[fill_count++] = ppoly->verts[i];
+
+    pcurrent_poly->verts[fill_count]    = NewConvexPolyVertex();
+    *pcurrent_poly->verts[fill_count++] = v2;
+
+    return true;
+}
+
+
+void BuildSubsectorPolygons_Recursive(int bspnum, convex_poly_t* ppoly)
+{
+    convex_poly_t  left_poly, right_poly;
+    node_t        *pnode;
+    partline_t     line;
+
+
+    if (bspnum & NF_SUBSECTOR)
+    {
+        int           subsector = bspnum & ~(NF_SUBSECTOR);
+        DW_FloorCeil* pplane    = subsector_planes + subsector;
+        int           i;
+
+        
+        pplane->Sector = subsectors[subsector].sector - sectors;
+
+        pplane->PCount = ppoly->vertex_count;
+        pplane->Point = (DW_Vertex3Dv*)malloc(sizeof(DW_Vertex3Dv) * ppoly->vertex_count);
+        for (i = 0; i < ppoly->vertex_count; i++)
+        {
+            pplane->Point[i].v[0] = ppoly->verts[i]->x;
+            pplane->Point[i].v[2] = -ppoly->verts[i]->y;
+        }
+
+        return;
+    }
+
+    pnode = nodes + bspnum;
+    NewPartitionLine(&line, FIXED_TO_FLOAT(pnode->x),
+        FIXED_TO_FLOAT(pnode->y), FIXED_TO_FLOAT(pnode->dx), FIXED_TO_FLOAT(pnode->dy));
+
+    ZeroMemory(&left_poly, sizeof(left_poly));
+    ZeroMemory(&right_poly, sizeof(right_poly));
+    SplitConvexPoly(ppoly, &line, &left_poly, &right_poly);
+
+    BuildSubsectorPolygons_Recursive(pnode->children[0], &right_poly);
+    BuildSubsectorPolygons_Recursive(pnode->children[1], &left_poly);
+
+    FreeConvexPoly(&left_poly);
+    FreeConvexPoly(&right_poly);
+}
+
+
 void CreateNewFlats()
-   {
-    static int             sector, line, side1, side2, section, side, l1, l2, lc, i;
+{
+    static int             sector, line, side1, side2, section, side, l1, l2, lc, i, j;
     static int             seg;
     static sector_plane_t *pplane;
     static sector_t       *psector;
@@ -1854,25 +2129,28 @@ void CreateNewFlats()
     static int             ss_count, ss, ssid, lineid;
     int                    sections, v1x, v2x, v1y, v2y, v1, v2;
 
+
+    convex_poly_t  poly;
+    fixed_t        rootbbox[4];
+
+
     // Free up what we allocated for the previous level...
     if (planes != NULL)
     {
         for (sector = 0, pplane = planes; sector < lastsectors; sector++, pplane++)
-        {
-            if (pplane->subsectors != NULL)
-            {
-                for (i = 0; i < pplane->ss_count; i++)
-                    FREE(pplane->subsectors[i].Point);
-
-                FREE(pplane->subsectors);
-            }
-        }
+            ZFREE(pplane->subsectors);
 
         ZFREE(planes);
     }
 
+    ZFREE(subsector_planes);
+
     planes = (sector_plane_t*)malloc(sizeof(sector_plane_t) * numsectors);
     ZeroMemory(planes, sizeof(sector_plane_t) * numsectors);
+
+    subsector_planes = (DW_FloorCeil*)malloc(sizeof(DW_FloorCeil) * numsubsectors);
+    ZeroMemory(subsector_planes, sizeof(DW_FloorCeil) * numsubsectors);
+
 
 #ifdef WDEBUG
     lfprintf( "Number of sectors = %d\n", numsectors);
@@ -1931,6 +2209,45 @@ void CreateNewFlats()
             }
         }
     }
+
+
+    ClearConvexPolyVertices();
+
+    M_ClearBox(rootbbox);
+    for (i = 0; i < numvertexes; i++)
+        M_AddToBox(rootbbox, vertexes[i].x, vertexes[i].y);
+
+    NewConvexPoly(&poly, 4);
+    for (i = 0; i < 4; i++)
+        poly.verts[i] = NewConvexPolyVertex();
+
+    poly.verts[0]->x = poly.verts[1]->x = FIXED_TO_FLOAT(rootbbox[BOXLEFT]);
+    poly.verts[2]->x = poly.verts[3]->x = FIXED_TO_FLOAT(rootbbox[BOXRIGHT]);
+    poly.verts[0]->y = poly.verts[3]->y = FIXED_TO_FLOAT(rootbbox[BOXBOTTOM]);
+    poly.verts[1]->y = poly.verts[2]->y = FIXED_TO_FLOAT(rootbbox[BOXTOP]);
+
+    BuildSubsectorPolygons_Recursive(numnodes - 1, &poly);
+
+    FreeConvexPoly(&poly);
+    ClearConvexPolyVertices();
+
+    for (i = 0; i < numsubsectors; i++)
+        planes[subsector_planes[i].Sector].ss_count++;
+
+    for (i = 0; i < numsectors; i++)
+    {
+        pplane = planes + i;
+        pplane->subsectors = (DW_FloorCeil**)malloc(sizeof(DW_FloorCeil*) * pplane->ss_count);
+        ZeroMemory(pplane->subsectors, sizeof(DW_FloorCeil*) * pplane->ss_count);
+        pplane->ss_count = 0;
+    }
+
+    for (i = 0; i < numsubsectors; i++)
+    {
+        pplane = planes + subsector_planes[i].Sector;
+        pplane->subsectors[pplane->ss_count++] = subsector_planes + i;
+    }
+
 
     ZFREE(DrawFlat);
 
@@ -2089,10 +2406,10 @@ void CalcTexCoords()
         if (SectorY < 0.0f)
            SectorY += 1.0f;
 
-        for (subsector = 0, psubsector = planes->subsectors; 
-            subsector < planes[sector].ss_count; 
-            subsector++, psubsector++)
+        for (subsector = 0; subsector < planes[sector].ss_count; subsector++)
         {
+            psubsector = planes[sector].subsectors[subsector];
+
             for (p = 0; p < psubsector->PCount; p++)
             {
                 psubsector->Point[p].tu = ((float)(psubsector->Point[p].v[0] - SectorBBox[sector].left)/xGrid)+SectorX;
