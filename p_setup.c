@@ -1886,11 +1886,15 @@ void FreeConvexPoly(convex_poly_t* poly)
 
 void CopyConvexPoly(convex_poly_t* pfrom, convex_poly_t* pto)
 {
-    pto->vertex_count = pfrom->vertex_count;
-    if (pfrom->vertex_count > 0)
-        NewConvexPoly(pto, pfrom->vertex_count);
+    ZFREE(pto->verts);
 
-    CopyMemory(pto->verts, pfrom->verts, sizeof(convex_poly_vert_t*) * pfrom->vertex_count);
+    if (pfrom->vertex_count > 0)
+    {
+        NewConvexPoly(pto, pfrom->vertex_count);
+        CopyMemory(pto->verts, pfrom->verts, sizeof(convex_poly_vert_t*) * pfrom->vertex_count);
+    }
+
+    pto->vertex_count = pfrom->vertex_count;
 }
 
 
@@ -2074,6 +2078,129 @@ dboolean SplitConvexPoly(convex_poly_t* ppoly,
 }
 
 
+void SplitConvexPolyBySeg(convex_poly_t* ppoly, partline_t* pline)
+{
+    int                 i, j;
+    dboolean            first_found, second_found;
+    convex_poly_vert_t  result;
+    int                 v_before, v_after;
+    convex_poly_vert_t  v1, v2;
+    convex_poly_t       temppoly;
+    int                 fill_count;
+
+    if (ppoly->vertex_count == 0)
+        return;
+
+    ZeroMemory(&temppoly, sizeof(temppoly));
+
+    first_found = false;
+    second_found = false;
+
+    for (i = 0; i < ppoly->vertex_count; i++)
+    {
+        j = i + 1;
+
+        if (!TestEdgeIntersection(pline, ppoly->verts[i],
+            ppoly->verts[j % ppoly->vertex_count], &result))
+            continue;
+
+        if (!first_found)
+        {
+            v_before    = i;
+            v1          = result;
+            first_found = true;
+        }
+        else
+        {
+            v_after      = j;
+            v2           = result;
+            second_found = true;
+            break;
+        }
+    }
+
+    if (!second_found)
+        return;
+
+    if (IsPointOnRightSide(pline, ppoly->verts[0]))
+    {
+        NewConvexPoly(&temppoly, (v_before + 1) + (ppoly->vertex_count - v_after) + 2);
+        fill_count = 0;
+
+        for (i = 0; i <= v_before; i++)
+            temppoly.verts[fill_count++] = ppoly->verts[i];
+
+        temppoly.verts[fill_count] = NewConvexPolyVertex();
+        *temppoly.verts[fill_count++] = v1;
+        temppoly.verts[fill_count] = NewConvexPolyVertex();
+        *temppoly.verts[fill_count++] = v2;
+
+        for (i = v_after; i < ppoly->vertex_count; i++)
+            temppoly.verts[fill_count++] = ppoly->verts[i];
+    }
+    else
+    {
+        NewConvexPoly(&temppoly, (v_after - v_before - 1) + 2);
+        fill_count = 0;
+
+        temppoly.verts[fill_count] = NewConvexPolyVertex();
+        *temppoly.verts[fill_count++] = v1;
+
+        for (i = v_before + 1; i < v_after; i++)
+            temppoly.verts[fill_count++] = ppoly->verts[i];
+
+        temppoly.verts[fill_count] = NewConvexPolyVertex();
+        *temppoly.verts[fill_count++] = v2;
+
+    }
+
+    CopyConvexPoly(&temppoly, ppoly);
+    FreeConvexPoly(&temppoly);
+}
+
+
+void CutSubsectorPolygonBySegs(convex_poly_t* ppoly, int subsector)
+{
+    subsector_t *psubsector = subsectors + subsector;
+    seg_t       *pseg       = segs + psubsector->firstline;
+    int          segcount   = psubsector->numlines;
+    line_t      *pline;
+    partline_t   partline;
+    vertex_t    *pv1, *pv2;
+
+
+    for(; segcount > 0; segcount--, pseg++)
+    {
+        pline = pseg->linedef;
+
+        if (pline->sidenum[1] != -1)
+        {
+            if (sides[pline->sidenum[0]].sector == sides[pline->sidenum[1]].sector)
+                continue;
+        }
+
+        if (pline->sidenum[0] == pseg->sidedef - sides)
+        {
+            pv1 = pline->v1;
+            pv2 = pline->v2;
+        }
+        else
+        {
+            pv1 = pline->v2;
+            pv2 = pline->v1;
+        }
+
+
+        partline.x  = FIXED_TO_FLOAT(pv1->x);
+        partline.y  = FIXED_TO_FLOAT(pv1->y);
+        partline.dx = FIXED_TO_FLOAT(pv2->x) - FIXED_TO_FLOAT(pv1->x);
+        partline.dy = FIXED_TO_FLOAT(pv2->y) - FIXED_TO_FLOAT(pv1->y);
+
+        SplitConvexPolyBySeg(ppoly, &partline);
+    }
+}
+
+
 void BuildSubsectorPolygons_Recursive(int bspnum, convex_poly_t* ppoly)
 {
     convex_poly_t  left_poly, right_poly;
@@ -2087,6 +2214,7 @@ void BuildSubsectorPolygons_Recursive(int bspnum, convex_poly_t* ppoly)
         DW_FloorCeil* pplane    = subsector_planes + subsector;
         int           i;
 
+        CutSubsectorPolygonBySegs(ppoly, subsector);
         
         pplane->Sector = subsectors[subsector].sector - sectors;
 
