@@ -190,6 +190,7 @@ void P_LoadSegs (int lump)
 	li->v1 = &vertexes[SHORT(ml->v1)];
 	li->v2 = &vertexes[SHORT(ml->v2)];
 					
+    li->side = SHORT(ml->side);
 	li->angle = (SHORT(ml->angle))<<16;
 	li->offset = (SHORT(ml->offset))<<16;
 	linedef = SHORT(ml->linedef);
@@ -1844,366 +1845,567 @@ void CreateNewWalls()
 
 
 
-typedef struct
+#define  PARTLINE_VERTEX_DIFF   0.45f
+
+
+typedef enum 
 {
-    double x, y;
-}convex_poly_vert_t;
+    PLC_NONE,
+    PLC_V1,
+    PLC_MIDDLE,
+    PLC_V2,
+} partline_cross_e;
 
-typedef convex_poly_vert_t vector_t;
 
-
-typedef struct
+typedef struct 
 {
-    convex_poly_vert_t** verts;
-    int                  vertex_count;
-}convex_poly_t;
+    float x, y;
+    float dx, dy;
+} partline_t;
 
 
-typedef struct
+typedef struct polyvertex_s 
 {
-    double x, y, dx, dy;
-}partline_t;
+    float x, y;
+} polyvertex_t;
 
 
-convex_poly_vert_t* vertex_buffer     = NULL;
-int                 vertex_buffer_len = 0;
-int                 num_used_verts    = 0;
-
-
-void NewConvexPoly(convex_poly_t* poly, int vertex_count)
+typedef struct 
 {
-    poly->vertex_count = vertex_count;
-    poly->verts        = (convex_poly_vert_t**)malloc(sizeof(convex_poly_vert_t*) * vertex_count);
-}
+    int            alloc_count;
+    int            vertex_count;
+    polyvertex_t** vertexes;
+} polygon_t;
 
 
-void FreeConvexPoly(convex_poly_t* poly)
+typedef struct 
 {
-    ZFREE(poly->verts);
-    poly->vertex_count = 0;
-}
+    polyvertex_t  cross_point;
+    polyvertex_t* pvertex;
+    float         frac_along_partline;
+    int           v_before, v_after; 
+} cross_result_t;
 
 
-void CopyConvexPoly(convex_poly_t* pfrom, convex_poly_t* pto)
+#define POLYVERTEX_STORE_SIZE  256
+
+typedef struct polyvertex_store_s
 {
-    ZFREE(pto->verts);
-
-    if (pfrom->vertex_count > 0)
-    {
-        NewConvexPoly(pto, pfrom->vertex_count);
-        CopyMemory(pto->verts, pfrom->verts, sizeof(convex_poly_vert_t*) * pfrom->vertex_count);
-    }
-
-    pto->vertex_count = pfrom->vertex_count;
-}
+    struct polyvertex_store_s* next;
+    int                        vertex_count;
+    polyvertex_t               vertexes[POLYVERTEX_STORE_SIZE];
+} polyvertex_store_t;
 
 
-void ClearConvexPolyVertices(void)
+polyvertex_store_t* polyvert_store = NULL;
+
+
+dboolean AreVertexesSame(polyvertex_t* pv1, polyvertex_t* pv2, float bias)
 {
-    ZFREE(vertex_buffer);
-    vertex_buffer_len = num_used_verts = 0;
-}
-
-
-convex_poly_vert_t* NewConvexPolyVertex()
-{
-    if(num_used_verts == vertex_buffer_len)
-    { 
-        int new_buffer_len;
-
-        new_buffer_len    = (vertex_buffer_len > 0) ? (vertex_buffer_len * 2) : 100;
-        vertex_buffer     = realloc(vertex_buffer, sizeof(convex_poly_vert_t) * new_buffer_len);
-        vertex_buffer_len = new_buffer_len;
-    }
-
-    return vertex_buffer + num_used_verts++;
-}
-
-
-void NewPartitionLine(partline_t* pline, float x, float y, float dx, float dy)
-{
-    pline->x  = x;
-    pline->y  = y;
-    pline->dx = dx;
-    pline->dy = dy;
-}
-
-
-void NormalizeVector(vector_t* pvec)
-{
-    float invlen = 1.0f / sqrtf(pvec->x * pvec->x + pvec->y * pvec->y);
-
-    pvec->x *= invlen;
-    pvec->y *= invlen;
-}
-
-
-void MakeOrthogonalRightVector(vector_t* pvec, vector_t* pright)
-{
-    pright->x = pvec->y;
-    pright->y = -pvec->x;
-}
-
-
-#define ProjectPoint(v, p)    ((v)->x * (p)->x + (v)->y * (p)->y)
-#define ProjectVector(v1, v2) ProjectPoint(v1, v2)
-#define DotProduct            ProjectVector
-
-
-dboolean IsPointOnRightSide(partline_t* pline, convex_poly_vert_t* pv)
-{
-    return ((pv->x - pline->x) * pline->dy - (pv->y - pline->y) * pline->dx) >= 0;
-}
-
-
-dboolean TestEdgeIntersection(partline_t* pline,
-    convex_poly_vert_t* pv1, convex_poly_vert_t* pv2, convex_poly_vert_t* presult)
-{
-    vector_t            line_vector, line_right, edge_vector;
-    vector_t            edge_start_to_line_start;
-    convex_poly_vert_t  line_start;
-    float               edge_proj, start_proj, lerp;
-
-
-    line_vector.x = pline->dx;
-    line_vector.y = pline->dy;
-    line_start.x  = pline->x;
-    line_start.y  = pline->y;
-    MakeOrthogonalRightVector(&line_vector, &line_right);
-    edge_vector.x = pv2->x - pv1->x;
-    edge_vector.y = pv2->y - pv1->y;
-
-    edge_proj = ProjectVector(&edge_vector, &line_right);
-    if (fabs(edge_proj) < 1.0e-36f)
+    if (fabsf(pv2->x - pv1->x) > bias)
         return false;
 
-    edge_start_to_line_start.x = pline->x - pv1->x;
-    edge_start_to_line_start.y = pline->y - pv1->y;
-
-    start_proj = ProjectVector(&edge_start_to_line_start, &line_right);
-
-    lerp = start_proj / edge_proj;
-    if (lerp < 0.0 || lerp > 1.0f)
+    if (fabsf(pv2->y - pv1->y) > bias)
         return false;
-
-    presult->x = pv1->x + edge_vector.x * lerp;
-    presult->y = pv1->y + edge_vector.y * lerp;
 
     return true;
 }
 
 
-dboolean SplitConvexPoly(convex_poly_t* ppoly, 
-    partline_t* pline, convex_poly_t* pleft_poly, convex_poly_t* pright_poly)
+dboolean IsPointOnRightSide(partline_t* pline, polyvertex_t* pv)
 {
-    int                 i, j;
-    dboolean            first_found, second_found;
-    convex_poly_vert_t  result;
-    int                 v_before, v_after;
-    dboolean            begin_on_right_side;
-    convex_poly_vert_t  v1, v2;
-    convex_poly_t      *pcurrent_poly;
-    int                 fill_count;
-
-    if (ppoly->verts == 0)
-        return false;
-
-    first_found  = false;
-    second_found = false;
-
-    for (i = 0; i < ppoly->vertex_count; i++)
-    {
-        j = i + 1;
-
-        if (!TestEdgeIntersection(pline, ppoly->verts[i], 
-            ppoly->verts[j % ppoly->vertex_count], &result))
-            continue;
-
-        if (!first_found)
-        {
-            v_before    = i;
-            v1          = result;
-            first_found = true;
-        }
-        else
-        {
-            v_after      = j;
-            v2           = result;
-            second_found = true;
-            break;
-        }
-    }
-
-    if (!second_found)
-    {
-        if (IsPointOnRightSide(pline, ppoly->verts[0]))
-            CopyConvexPoly(ppoly, pright_poly);
-        else
-            CopyConvexPoly(ppoly, pleft_poly);
-
-        return false;
-    }
-
-    begin_on_right_side = IsPointOnRightSide(pline, ppoly->verts[0]);
-
-    pcurrent_poly = begin_on_right_side ? pright_poly : pleft_poly;
-    NewConvexPoly(pcurrent_poly, (v_before + 1) + (ppoly->vertex_count - v_after) + 2);
-    fill_count = 0;
-    
-    for (i = 0; i <= v_before; i++)
-        pcurrent_poly->verts[fill_count++] = ppoly->verts[i];
-
-    pcurrent_poly->verts[fill_count]    = NewConvexPolyVertex();
-    *pcurrent_poly->verts[fill_count++] = v1;
-    pcurrent_poly->verts[fill_count]    = NewConvexPolyVertex();
-    *pcurrent_poly->verts[fill_count++] = v2;
-
-    for(i = v_after; i < ppoly->vertex_count; i++)
-        pcurrent_poly->verts[fill_count++] = ppoly->verts[i];
-
-    pcurrent_poly = begin_on_right_side ? pleft_poly : pright_poly;
-    NewConvexPoly(pcurrent_poly, (v_after - v_before - 1) + 2);
-    fill_count = 0;
-
-    pcurrent_poly->verts[fill_count]    = NewConvexPolyVertex();
-    *pcurrent_poly->verts[fill_count++] = v1;
-
-    for (i = v_before + 1; i < v_after; i++)
-        pcurrent_poly->verts[fill_count++] = ppoly->verts[i];
-
-    pcurrent_poly->verts[fill_count]    = NewConvexPolyVertex();
-    *pcurrent_poly->verts[fill_count++] = v2;
-
-    return true;
+    return ((((double)pv->x - (double)pline->x) * (double)pline->dy)
+            - (((double)pv->y - (double)pline->y) * (double)pline->dx)
+            >= 0);
 }
 
 
-void SplitConvexPolyBySeg(convex_poly_t* ppoly, partline_t* pline)
+void PVStore_Free(void)
 {
-    int                 i, j;
-    dboolean            first_found, second_found;
-    convex_poly_vert_t  result;
-    int                 v_before, v_after;
-    convex_poly_vert_t  v1, v2;
-    convex_poly_t       temppoly;
-    int                 fill_count;
+    polyvertex_store_t *pcurrent, *pprev;
 
-    if (ppoly->vertex_count == 0)
-        return;
+    pcurrent = polyvert_store;
+    while (pcurrent != NULL)
+    {
+        pprev    = pcurrent;
+        pcurrent = pcurrent->next;
+        free(pprev);
+    }
 
-    ZeroMemory(&temppoly, sizeof(temppoly));
+    polyvert_store = NULL;
+}
 
-    first_found = false;
-    second_found = false;
+
+polyvertex_t* PVStore_NewVertex(void)
+{
+    polyvertex_store_t* pstore;
+
+    pstore = polyvert_store;
+    if (pstore == NULL || pstore->vertex_count == POLYVERTEX_STORE_SIZE)
+    {
+        polyvert_store               = malloc(sizeof(polyvertex_store_t));
+        polyvert_store->next         = pstore;
+        polyvert_store->vertex_count = 0;
+
+        pstore = polyvert_store;
+    }
+
+    return pstore->vertexes + pstore->vertex_count++;
+}
+
+
+void PVStore_Push(polyvertex_t* pv)
+{
+    *PVStore_NewVertex() = *pv;
+}
+
+
+void PVStore_Init(void)
+{
+    int          i;
+    polyvertex_t v;
+
+    PVStore_Free();
+
+    for (i = 0; i < numvertexes; i++)
+    {
+        v.x = FIXED_TO_FLOAT(vertexes[i].x);
+        v.y = FIXED_TO_FLOAT(vertexes[i].y);
+        PVStore_Push(&v);
+    }
+}
+
+
+polyvertex_t* PVStore_FindCloseVertex(polyvertex_t* pv_close_to, float bias)
+{
+    polyvertex_store_t* pstore;
+    polyvertex_t*       pv;
+    int                 i;
+
+    pstore = polyvert_store;
+    while (pstore != NULL)
+    {
+        for (i = 0, pv = pstore->vertexes; i < pstore->vertex_count; i++, pv++)
+            if (AreVertexesSame(pv, pv_close_to, bias))
+                return pv;
+
+        pstore = pstore->next;
+    }
+
+    return NULL;
+}
+
+
+polyvertex_t* PVStore_StoreVertex(polyvertex_t* pv, float bias)
+{
+    polyvertex_t* stored;
+
+    stored = PVStore_FindCloseVertex(pv, bias);
+    if (stored == NULL)
+    {
+        stored  = PVStore_NewVertex();
+        *stored = *pv;
+    }
+
+    return stored;
+}
+
+
+void Poly_ZeroInit(polygon_t* ppoly)
+{
+    ZeroMemory(ppoly, sizeof(polygon_t));
+}
+
+
+void Poly_Init(polygon_t* ppoly, int alloc_count)
+{
+    ppoly->vertex_count = 0;
+    ppoly->alloc_count  = alloc_count;
+    ppoly->vertexes     = malloc(sizeof(void*) * alloc_count);
+}
+
+
+void Poly_Free(polygon_t* ppoly)
+{
+    ZFREE(ppoly->vertexes);
+    ppoly->alloc_count = ppoly->vertex_count = 0;
+}
+
+
+void Poly_Move(polygon_t* pfrom, polygon_t* pto)
+{
+    FREE(pto->vertexes);
+
+    *pto = *pfrom;
+    ZeroMemory(pfrom, sizeof(polygon_t));
+}
+
+
+void Poly_AppendFromPoly(
+    polygon_t* pfrom, int range_start, int range_size, polygon_t* pto)
+{
+
+    if (range_size > (pto->alloc_count - pto->vertex_count))
+        range_size = (pto->alloc_count - pto->vertex_count);
+
+    while (range_size > 0)
+    {
+        int size = min(pfrom->vertex_count - range_start, range_size);
+
+        CopyMemory(pto->vertexes + pto->vertex_count,
+            pfrom->vertexes + range_start, sizeof(void*) * size);
+
+        pto->vertex_count += size;
+        range_size        -= size;
+        range_start        = 0;
+    }
+
+}
+
+
+void Poly_SplitCopy(
+    polyvertex_t* pv1, polyvertex_t* pv2,
+    polygon_t* pfrom, int range_start, int range_size,
+    polygon_t* pto)
+{
+    int initial_vertex_count = 0;
+
+    if (pv1 != NULL)
+        initial_vertex_count++;
+
+    if (pv2 != NULL)
+        initial_vertex_count++;
+
+    Poly_Free(pto);
+    Poly_Init(pto, initial_vertex_count + range_size);
+
+    if (pv1 != NULL)
+        pto->vertexes[pto->vertex_count++] = pv1;
+
+    if (pv2 != NULL)
+        pto->vertexes[pto->vertex_count++] = pv2;
+
+    Poly_AppendFromPoly(pfrom, range_start, range_size, pto);
+}
+
+
+void Poly_InsertCut(
+    polyvertex_t* pv1, polyvertex_t* pv2,
+    int save_range_start, int save_range_size,
+    polygon_t* ppoly)
+{
+    polygon_t temp_poly;
+
+    temp_poly = *ppoly;
+    ZeroMemory(ppoly, sizeof(polygon_t));
+
+    Poly_SplitCopy(pv1, pv2, &temp_poly, save_range_start, save_range_size, ppoly);
+    Poly_Free(&temp_poly);
+}
+
+
+partline_cross_e TestPartitionLineIntersection(
+    partline_t* pline, polyvertex_t* pv1, polyvertex_t* pv2,
+    cross_result_t* presult)
+{
+    typedef struct vector_s
+    {
+        double x, y;
+    }vector_t;
+
+    double   frac;
+    double   num, den; 
+    vector_t edge, edge_right;
+    vector_t line_right, origins_vector;
+
+    edge.x = pv2->x - pv1->x;
+    edge.y = pv2->y - pv1->y;
+
+    edge_right.x = edge.y;
+    edge_right.y = -edge.x;
+
+    line_right.x = pline->dy;
+    line_right.y = -pline->dx;
+
+    den = line_right.x * edge.x + line_right.y * edge.y;
+    if (fabs(den) < 1.0E-36f)
+        return PLC_NONE;
+
+    origins_vector.x = pline->x - pv1->x;
+    origins_vector.y = pline->y - pv1->y;
+
+    num  = origins_vector.x * line_right.x + origins_vector.y * line_right.y;
+    frac = num / den;
+    if (frac < 0.0 || frac > 1.0)
+        return PLC_NONE;
+
+    num = origins_vector.x * edge_right.x + origins_vector.y * edge_right.y;
+
+    presult->frac_along_partline = num / den;
+
+    presult->cross_point.x = pv1->x + edge.x * frac;
+    presult->cross_point.y = pv1->y + edge.y * frac;
+
+    if (frac < 0.05 
+        && AreVertexesSame(&presult->cross_point, pv1, PARTLINE_VERTEX_DIFF))
+    {
+        presult->pvertex  = pv1;
+        presult->v_before = -1;
+        presult->v_after  = 1;
+
+        return PLC_V1;
+    }
+    if (frac > 0.95 
+        && AreVertexesSame(&presult->cross_point, pv2, PARTLINE_VERTEX_DIFF))
+    {
+        presult->pvertex  = pv2;
+        presult->v_before = 0; 
+        presult->v_after  = 2; 
+
+        return PLC_V2;
+    }
+
+
+    presult->pvertex  = NULL;
+    presult->v_before = 0; 
+    presult->v_after  = 1;
+
+    return PLC_MIDDLE;
+}
+
+
+void CutOutPolygonByLine(partline_t* pline, polygon_t* ppoly)
+{
+    int i, j;
+    int vertex_save_count, first_saving_vertex;
+
+    polyvertex_t *pv1, *pv2;
+
+    cross_result_t    result_A, result_B, *presult;
+    dboolean          A_found, B_found;
+    dboolean          cut_at_vertexes;
+
+    A_found = B_found = false;
+    presult = &result_A;
 
     for (i = 0; i < ppoly->vertex_count; i++)
     {
-        j = i + 1;
+        j = (i + 1) % ppoly->vertex_count;
 
-        if (!TestEdgeIntersection(pline, ppoly->verts[i],
-            ppoly->verts[j % ppoly->vertex_count], &result))
+        if (TestPartitionLineIntersection(pline,
+            ppoly->vertexes[i], ppoly->vertexes[j], presult) == PLC_NONE)
             continue;
 
-        if (!first_found)
+        if (!A_found)
         {
-            v_before    = i;
-            v1          = result;
-            first_found = true;
+            result_A.v_after  += i;
+            result_A.v_before += i;
+
+            presult = &result_B;
+            A_found = true;
         }
         else
         {
-            v_after      = j;
-            v2           = result;
-            second_found = true;
+            if (result_B.pvertex != NULL &&
+                result_B.pvertex == result_A.pvertex)
+                continue;
+
+            result_B.v_after  += i;
+            result_B.v_before += i;
+
+            B_found = true;
             break;
         }
     }
 
-    if (!second_found)
+    if (!B_found)
         return;
 
-    if (IsPointOnRightSide(pline, ppoly->verts[0]))
+    if (result_A.frac_along_partline < 0.0f && result_B.frac_along_partline < 0.0f)
+        return;
+
+    if (result_A.frac_along_partline > 1.0f && result_B.frac_along_partline > 1.0f)
+        return;
+
+    if (cut_at_vertexes = (result_A.pvertex != NULL && result_B.pvertex != NULL))
     {
-        NewConvexPoly(&temppoly, (v_before + 1) + (ppoly->vertex_count - v_after) + 2);
-        fill_count = 0;
+        if (result_A.v_after + 1 == result_B.v_after)
+            return;
 
-        for (i = 0; i <= v_before; i++)
-            temppoly.verts[fill_count++] = ppoly->verts[i];
+        if (result_A.v_after + ppoly->vertex_count == result_B.v_after + 1)
+            return;
+    }
 
-        temppoly.verts[fill_count] = NewConvexPolyVertex();
-        *temppoly.verts[fill_count++] = v1;
-        temppoly.verts[fill_count] = NewConvexPolyVertex();
-        *temppoly.verts[fill_count++] = v2;
+    if (result_A.pvertex == NULL)
+        result_A.pvertex = PVStore_StoreVertex(&result_A.cross_point, 0.25f);
 
-        for (i = v_after; i < ppoly->vertex_count; i++)
-            temppoly.verts[fill_count++] = ppoly->verts[i];
+    if (result_B.pvertex == NULL)
+        result_B.pvertex = PVStore_StoreVertex(&result_B.cross_point, 0.25f);
+
+    if (result_A.frac_along_partline > result_B.frac_along_partline)
+    {
+        vertex_save_count   = result_B.v_before - result_A.v_after + 1;
+        first_saving_vertex = result_A.v_after;
+        
+        pv1 = result_B.pvertex;
+        pv2 = result_A.pvertex;
     }
     else
     {
-        NewConvexPoly(&temppoly, (v_after - v_before - 1) + 2);
-        fill_count = 0;
+        vertex_save_count   = result_A.v_before + ppoly->vertex_count - result_B.v_after + 1;
+        first_saving_vertex = result_B.v_after;
 
-        temppoly.verts[fill_count] = NewConvexPolyVertex();
-        *temppoly.verts[fill_count++] = v1;
-
-        for (i = v_before + 1; i < v_after; i++)
-            temppoly.verts[fill_count++] = ppoly->verts[i];
-
-        temppoly.verts[fill_count] = NewConvexPolyVertex();
-        *temppoly.verts[fill_count++] = v2;
-
+        pv1 = result_A.pvertex;
+        pv2 = result_B.pvertex;
     }
 
-    CopyConvexPoly(&temppoly, ppoly);
-    FreeConvexPoly(&temppoly);
+    if (cut_at_vertexes && ((vertex_save_count + 2) == ppoly->vertex_count))
+        return;
+
+    Poly_InsertCut(pv1, pv2, 
+        first_saving_vertex % ppoly->vertex_count, vertex_save_count, ppoly);
 }
 
 
-void CutSubsectorPolygonBySegs(convex_poly_t* ppoly, int subsector)
+void CutOutSubsectorPoly(int subsector, polygon_t* ppoly)
 {
-    subsector_t *psubsector = subsectors + subsector;
-    seg_t       *pseg       = segs + psubsector->firstline;
-    int          segcount   = psubsector->numlines;
-    line_t      *pline;
-    partline_t   partline;
-    vertex_t    *pv1, *pv2;
+    subsector_t*      psubsector;
+    seg_t*            pseg;
+    line_t*           pline;
+    partline_t        line;
 
+    int i;
 
-    for(; segcount > 0; segcount--, pseg++)
+    psubsector = subsectors + subsector;
+
+    for (pseg = segs + psubsector->firstline, i = 0;
+        i < psubsector->numlines;
+        pseg++, i++)
     {
         pline = pseg->linedef;
 
-        if (pline->sidenum[1] != -1)
-        {
-            if (sides[pline->sidenum[0]].sector == sides[pline->sidenum[1]].sector)
-                continue;
-        }
+        if (pline->sidenum[1] != -1 &&
+            (sides[pline->sidenum[0]].sector == sides[pline->sidenum[1]].sector))
+            continue;
 
-        if (pline->sidenum[0] == pseg->sidedef - sides)
+        if (pseg->side)
         {
-            pv1 = pline->v1;
-            pv2 = pline->v2;
+            line.x  = FIXED_TO_FLOAT(pline->v2->x);
+            line.y  = FIXED_TO_FLOAT(pline->v2->y);
+            line.dx = -FIXED_TO_FLOAT(pline->dx);
+            line.dy = -FIXED_TO_FLOAT(pline->dy);
         }
         else
         {
-            pv1 = pline->v2;
-            pv2 = pline->v1;
+            line.x  = FIXED_TO_FLOAT(pline->v1->x);
+            line.y  = FIXED_TO_FLOAT(pline->v1->y);
+            line.dx = FIXED_TO_FLOAT(pline->dx);
+            line.dy = FIXED_TO_FLOAT(pline->dy);
         }
 
-
-        partline.x  = FIXED_TO_FLOAT(pv1->x);
-        partline.y  = FIXED_TO_FLOAT(pv1->y);
-        partline.dx = FIXED_TO_FLOAT(pv2->x) - FIXED_TO_FLOAT(pv1->x);
-        partline.dy = FIXED_TO_FLOAT(pv2->y) - FIXED_TO_FLOAT(pv1->y);
-
-        SplitConvexPolyBySeg(ppoly, &partline);
+        CutOutPolygonByLine(&line, ppoly);
     }
 }
 
 
-void BuildSubsectorPolygons_Recursive(int bspnum, convex_poly_t* ppoly)
+void SplitPoly(
+    partline_t* pline, polygon_t* ppoly,
+    polygon_t* ppoly_left, polygon_t* ppoly_right)
 {
-    convex_poly_t  left_poly, right_poly;
+    int i, j;
+    int saved_vertex_count;
+
+    polygon_t* ptemppoly;
+
+    cross_result_t  result_A, result_B;
+    cross_result_t* presult;
+    dboolean        A_found, B_found;
+
+    A_found = B_found = false;
+    presult = &result_A;
+
+    for (i = 0; i < ppoly->vertex_count; i++)
+    {
+        j = (i + 1) % ppoly->vertex_count;
+
+        if (TestPartitionLineIntersection(
+            pline, ppoly->vertexes[i], ppoly->vertexes[j], 
+            presult) == PLC_NONE)
+            continue;
+
+        if (!A_found)
+        {
+            result_A.v_before += i;
+            result_A.v_after  += i;
+
+            presult = &result_B;
+            A_found = true;
+        }
+        else 
+        {
+            if (result_B.pvertex != NULL &&
+                result_B.pvertex == result_A.pvertex)
+                continue;
+
+            result_B.v_before += i;
+            result_B.v_after  += i;
+            B_found            = true;
+            break;
+        }
+    }
+
+    if (B_found)
+    {
+        if (result_A.pvertex == NULL)
+            result_A.pvertex = PVStore_StoreVertex(&result_A.cross_point, 0.01f);
+
+        if (result_B.pvertex == NULL)
+            result_B.pvertex = PVStore_StoreVertex(&result_B.cross_point, 0.01f);
+
+        if (result_A.frac_along_partline <= result_B.frac_along_partline)
+        {
+            ptemppoly   = ppoly_left;
+            ppoly_left  = ppoly_right;
+            ppoly_right = ptemppoly;
+        }
+    
+        saved_vertex_count = result_B.v_before - result_A.v_after + 1;
+        if (saved_vertex_count > 0)
+        {
+            Poly_SplitCopy(result_B.pvertex, result_A.pvertex,
+                ppoly, result_A.v_after, saved_vertex_count, ppoly_right);
+        }
+        else
+            ppoly_right->vertex_count = 0;
+
+        saved_vertex_count = result_A.v_before + ppoly->vertex_count - result_B.v_after + 1;
+        if (saved_vertex_count > 0)
+        {
+            Poly_SplitCopy(result_A.pvertex, result_B.pvertex,
+                ppoly, result_B.v_after % ppoly->vertex_count, saved_vertex_count, ppoly_left);
+        }
+        else
+            ppoly_left->vertex_count = 0;
+    }
+    else
+    {
+        if (IsPointOnRightSide(pline, ppoly->vertexes[0]))
+        {
+            Poly_Move(ppoly, ppoly_right);
+            ppoly_left->vertex_count = 0;
+        }
+        else
+        {
+            Poly_Move(ppoly, ppoly_left);
+            ppoly_right->vertex_count = 0;
+        }
+    }
+}
+
+
+void BuildSubsectorPolygons_Recursive(int bspnum, polygon_t* ppoly)
+{
+    polygon_t      left_poly, right_poly;
     node_t        *pnode;
     partline_t     line;
 
@@ -2214,7 +2416,7 @@ void BuildSubsectorPolygons_Recursive(int bspnum, convex_poly_t* ppoly)
         DW_FloorCeil* pplane    = subsector_planes + subsector;
         int           i;
 
-        CutSubsectorPolygonBySegs(ppoly, subsector);
+        CutOutSubsectorPoly(subsector, ppoly);
         
         pplane->Sector = subsectors[subsector].sector - sectors;
 
@@ -2222,26 +2424,30 @@ void BuildSubsectorPolygons_Recursive(int bspnum, convex_poly_t* ppoly)
         pplane->Point = (DW_Vertex3Dv*)malloc(sizeof(DW_Vertex3Dv) * ppoly->vertex_count);
         for (i = 0; i < ppoly->vertex_count; i++)
         {
-            pplane->Point[i].v[0] = ppoly->verts[i]->x;
-            pplane->Point[i].v[2] = -ppoly->verts[i]->y;
+            pplane->Point[i].v[0] = ppoly->vertexes[i]->x;
+            pplane->Point[i].v[2] = -ppoly->vertexes[i]->y;
         }
 
         return;
     }
 
-    pnode = nodes + bspnum;
-    NewPartitionLine(&line, FIXED_TO_FLOAT(pnode->x),
-        FIXED_TO_FLOAT(pnode->y), FIXED_TO_FLOAT(pnode->dx), FIXED_TO_FLOAT(pnode->dy));
+    pnode   = nodes + bspnum;
+    line.x  = FIXED_TO_FLOAT(pnode->x);
+    line.y  = FIXED_TO_FLOAT(pnode->y);
+    line.dx = FIXED_TO_FLOAT(pnode->dx);
+    line.dy = FIXED_TO_FLOAT(pnode->dy);
 
-    ZeroMemory(&left_poly, sizeof(left_poly));
-    ZeroMemory(&right_poly, sizeof(right_poly));
-    SplitConvexPoly(ppoly, &line, &left_poly, &right_poly);
+    Poly_ZeroInit(&left_poly);
+    Poly_ZeroInit(&right_poly);
+    SplitPoly(&line, ppoly, &left_poly, &right_poly);
 
-    BuildSubsectorPolygons_Recursive(pnode->children[0], &right_poly);
-    BuildSubsectorPolygons_Recursive(pnode->children[1], &left_poly);
+    if(right_poly.vertex_count > 0)
+        BuildSubsectorPolygons_Recursive(pnode->children[0], &right_poly);
+    if (left_poly.vertex_count > 0)
+        BuildSubsectorPolygons_Recursive(pnode->children[1], &left_poly);
 
-    FreeConvexPoly(&left_poly);
-    FreeConvexPoly(&right_poly);
+    Poly_Free(&left_poly);
+    Poly_Free(&right_poly);
 }
 
 
@@ -2258,8 +2464,8 @@ void CreateNewFlats()
     int                    sections, v1x, v2x, v1y, v2y, v1, v2;
 
 
-    convex_poly_t  poly;
-    fixed_t        rootbbox[4];
+    polygon_t  poly;
+    fixed_t    rootbbox[4];
 
 
     // Free up what we allocated for the previous level...
@@ -2339,25 +2545,27 @@ void CreateNewFlats()
     }
 
 
-    ClearConvexPolyVertices();
+    PVStore_Init();
+    ZFREE(polyvert_store);
 
     M_ClearBox(rootbbox);
     for (i = 0; i < numvertexes; i++)
         M_AddToBox(rootbbox, vertexes[i].x, vertexes[i].y);
 
-    NewConvexPoly(&poly, 4);
+    Poly_Init(&poly, 4);
     for (i = 0; i < 4; i++)
-        poly.verts[i] = NewConvexPolyVertex();
+        poly.vertexes[i] = PVStore_NewVertex();
+    poly.vertex_count = 4;
 
-    poly.verts[0]->x = poly.verts[1]->x = FIXED_TO_FLOAT(rootbbox[BOXLEFT]);
-    poly.verts[2]->x = poly.verts[3]->x = FIXED_TO_FLOAT(rootbbox[BOXRIGHT]);
-    poly.verts[0]->y = poly.verts[3]->y = FIXED_TO_FLOAT(rootbbox[BOXBOTTOM]);
-    poly.verts[1]->y = poly.verts[2]->y = FIXED_TO_FLOAT(rootbbox[BOXTOP]);
+    poly.vertexes[0]->x = poly.vertexes[1]->x = FIXED_TO_FLOAT(rootbbox[BOXLEFT]);
+    poly.vertexes[2]->x = poly.vertexes[3]->x = FIXED_TO_FLOAT(rootbbox[BOXRIGHT]);
+    poly.vertexes[0]->y = poly.vertexes[3]->y = FIXED_TO_FLOAT(rootbbox[BOXBOTTOM]);
+    poly.vertexes[1]->y = poly.vertexes[2]->y = FIXED_TO_FLOAT(rootbbox[BOXTOP]);
 
     BuildSubsectorPolygons_Recursive(numnodes - 1, &poly);
 
-    FreeConvexPoly(&poly);
-    ClearConvexPolyVertices();
+    Poly_Free(&poly);
+    PVStore_Free();
 
     for (i = 0; i < numsubsectors; i++)
         planes[subsector_planes[i].Sector].ss_count++;

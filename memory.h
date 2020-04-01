@@ -13,5 +13,9 @@
 #define ZeroMemory(x, size) memset(x, 0, size)
 #endif
 
+#ifndef CopyMemory
+#define CopyMemory(dest, source, size) memcpy(dest, source, size)
+#endif
+
 
 #endif

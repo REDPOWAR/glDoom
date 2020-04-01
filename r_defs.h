@@ -242,6 +242,8 @@ typedef struct
 {
     vertex_t*	v1;
     vertex_t*	v2;
+
+    int     side;
     
     fixed_t	offset;
 
