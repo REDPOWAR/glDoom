@@ -556,6 +556,9 @@ int GL_MakeSpriteTexture(patch_t *Sprite, GLTexData *Tex, dboolean smooth)
     int            TempTexNumb;
     int            iGLWide, iGLHigh;
 
+    if (Sprite == NULL)
+        return;
+
     //ixsize = Sprite->width-Sprite->leftoffset;
     //iysize = Sprite->height-Sprite->topoffset;
 
