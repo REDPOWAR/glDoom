@@ -2104,7 +2104,7 @@ void Poly_InsertCut(
 }
 
 
-partline_cross_e TestPartitionLineIntersection(
+partline_cross_e GLBSP_TestPartitionLineIntersection(
     partline_t* pline, polyvertex_t* pv1, polyvertex_t* pv2,
     cross_result_t* presult)
 {
@@ -2141,10 +2141,10 @@ partline_cross_e TestPartitionLineIntersection(
 
     num = origins_vector.x * edge_right.x + origins_vector.y * edge_right.y;
 
-    presult->frac_along_partline = num / den;
+    presult->frac_along_partline = (float)(num / den);
 
-    presult->cross_point.x = pv1->x + edge.x * frac;
-    presult->cross_point.y = pv1->y + edge.y * frac;
+    presult->cross_point.x = (float)((double)pv1->x + edge.x * frac);
+    presult->cross_point.y = (float)((double)pv1->y + edge.y * frac);
 
     if (frac < 0.05 
         && AreVertexesSame(&presult->cross_point, pv1, PARTLINE_VERTEX_DIFF))
@@ -2174,7 +2174,7 @@ partline_cross_e TestPartitionLineIntersection(
 }
 
 
-void CutOutPolygonByLine(partline_t* pline, polygon_t* ppoly)
+void GLBSP_CutOutPolygonByLine(partline_t* pline, polygon_t* ppoly)
 {
     int i, j;
     int vertex_save_count, first_saving_vertex;
@@ -2192,7 +2192,7 @@ void CutOutPolygonByLine(partline_t* pline, polygon_t* ppoly)
     {
         j = (i + 1) % ppoly->vertex_count;
 
-        if (TestPartitionLineIntersection(pline,
+        if (GLBSP_TestPartitionLineIntersection(pline,
             ppoly->vertexes[i], ppoly->vertexes[j], presult) == PLC_NONE)
             continue;
 
@@ -2267,7 +2267,7 @@ void CutOutPolygonByLine(partline_t* pline, polygon_t* ppoly)
 }
 
 
-void CutOutSubsectorPoly(int subsector, polygon_t* ppoly)
+void GLBSP_CutOutSubsectorPoly(int subsector, polygon_t* ppoly)
 {
     subsector_t*      psubsector;
     seg_t*            pseg;
@@ -2303,12 +2303,12 @@ void CutOutSubsectorPoly(int subsector, polygon_t* ppoly)
             line.dy = FIXED_TO_FLOAT(pline->dy);
         }
 
-        CutOutPolygonByLine(&line, ppoly);
+        GLBSP_CutOutPolygonByLine(&line, ppoly);
     }
 }
 
 
-void SplitPoly(
+void GLBSP_SplitPoly(
     partline_t* pline, polygon_t* ppoly,
     polygon_t* ppoly_left, polygon_t* ppoly_right)
 {
@@ -2328,7 +2328,7 @@ void SplitPoly(
     {
         j = (i + 1) % ppoly->vertex_count;
 
-        if (TestPartitionLineIntersection(
+        if (GLBSP_TestPartitionLineIntersection(
             pline, ppoly->vertexes[i], ppoly->vertexes[j], 
             presult) == PLC_NONE)
             continue;
@@ -2403,7 +2403,7 @@ void SplitPoly(
 }
 
 
-void BuildSubsectorPolygons_Recursive(int bspnum, polygon_t* ppoly)
+void GLBSP_BuildSubsectorPolygons_Recursive(int bspnum, polygon_t* ppoly)
 {
     polygon_t      left_poly, right_poly;
     node_t        *pnode;
@@ -2416,7 +2416,7 @@ void BuildSubsectorPolygons_Recursive(int bspnum, polygon_t* ppoly)
         DW_FloorCeil* pplane    = subsector_planes + subsector;
         int           i;
 
-        CutOutSubsectorPoly(subsector, ppoly);
+        GLBSP_CutOutSubsectorPoly(subsector, ppoly);
         
         pplane->Sector = subsectors[subsector].sector - sectors;
 
@@ -2439,12 +2439,12 @@ void BuildSubsectorPolygons_Recursive(int bspnum, polygon_t* ppoly)
 
     Poly_ZeroInit(&left_poly);
     Poly_ZeroInit(&right_poly);
-    SplitPoly(&line, ppoly, &left_poly, &right_poly);
+    GLBSP_SplitPoly(&line, ppoly, &left_poly, &right_poly);
 
     if(right_poly.vertex_count > 0)
-        BuildSubsectorPolygons_Recursive(pnode->children[0], &right_poly);
+        GLBSP_BuildSubsectorPolygons_Recursive(pnode->children[0], &right_poly);
     if (left_poly.vertex_count > 0)
-        BuildSubsectorPolygons_Recursive(pnode->children[1], &left_poly);
+        GLBSP_BuildSubsectorPolygons_Recursive(pnode->children[1], &left_poly);
 
     Poly_Free(&left_poly);
     Poly_Free(&right_poly);
@@ -2461,7 +2461,7 @@ void CreateNewFlats()
     static side_t         *pside1, *pside2;
     static RECT           *pbbox;
     static int             ss_count, ss, ssid, lineid;
-    int                    sections, v1x, v2x, v1y, v2y, v1, v2;
+    int                    v1x, v2x, v1y, v2y;
 
 
     polygon_t  poly;
@@ -2546,7 +2546,6 @@ void CreateNewFlats()
 
 
     PVStore_Init();
-    ZFREE(polyvert_store);
 
     M_ClearBox(rootbbox);
     for (i = 0; i < numvertexes; i++)
@@ -2562,7 +2561,7 @@ void CreateNewFlats()
     poly.vertexes[0]->y = poly.vertexes[3]->y = FIXED_TO_FLOAT(rootbbox[BOXBOTTOM]);
     poly.vertexes[1]->y = poly.vertexes[2]->y = FIXED_TO_FLOAT(rootbbox[BOXTOP]);
 
-    BuildSubsectorPolygons_Recursive(numnodes - 1, &poly);
+    GLBSP_BuildSubsectorPolygons_Recursive(numnodes - 1, &poly);
 
     Poly_Free(&poly);
     PVStore_Free();
