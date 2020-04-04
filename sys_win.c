@@ -171,6 +171,8 @@ char      szAppName[] = "glDoom";
 char      szDbgName[] = "glDoom.dbg";
 char      szCfgName[] = "glDoom.cfg";
 HACCEL    ghAccel;
+HICON     g_hIcon = NULL;
+
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR szCmdLine, int iCmdShow)
    {
@@ -182,6 +184,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR szCmdLine,
         SetForegroundWindow(hwnd);
         return 0;
        }
+
+    g_hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_GLDOOM));
 
     ClearLog(szDbgName);
 
@@ -411,8 +415,9 @@ void Cleanup()
     M_FreeParms();
    }
 
+
 BOOL CreateTempWindow()
-   {
+{
     WNDCLASSEX  wndclass;
     DWORD       dwStyle, dwExStyle;
     int         x, y, sx, sy, ex, ey;
@@ -423,7 +428,7 @@ BOOL CreateTempWindow()
     wndclass.cbClsExtra    = 0;
     wndclass.cbWndExtra    = 0;
     wndclass.hInstance     = WinData.hInstance;
-    wndclass.hIcon         = 0;
+    wndclass.hIcon         = g_hIcon;
     wndclass.hCursor       = LoadCursor (NULL, IDC_ARROW);
     wndclass.hbrBackground = (void *)COLOR_GRAYTEXT;
     wndclass.lpszMenuName  = NULL;
@@ -432,10 +437,10 @@ BOOL CreateTempWindow()
 
 
     if (!RegisterClassEx (&wndclass))
-       {
+    {
         MessageBox(NULL, "Window class registration failed.", "FATAL ERROR", MB_OK);
         return FALSE;
-       }
+    }
 
     if ((WinData.hWnd = CreateWindowEx (0,
                     "NOCLASS",               // window class name
@@ -448,22 +453,27 @@ BOOL CreateTempWindow()
                     WinData.hInstance,       // program instance handle
 		            NULL))                   // creation parameters
                     == NULL)
-        {
-         ChangeDisplaySettings(0, 0);
-         MessageBox(NULL, "Window creation failed.", "FATAL ERROR", MB_OK);
-         return FALSE;
-        }
+    {
+        ChangeDisplaySettings(0, 0);
+        MessageBox(NULL, "Window creation failed.", "FATAL ERROR", MB_OK);
+        return FALSE;
+    }
+
+    SendMessage(WinData.hWnd, WM_SETICON, ICON_SMALL, (LPARAM)g_hIcon);
+    SendMessage(WinData.hWnd, WM_SETICON, ICON_BIG, (LPARAM)g_hIcon);
 
     ShowWindow(WinData.hWnd, WinData.iCmdShow);
     UpdateWindow(WinData.hWnd);
 
     SetForegroundWindow(WinData.hWnd);
     SetFocus(WinData.hWnd);
+
     return TRUE;
-   }
+}
+
 
 BOOL CreateMainWindow(int width, int height, int bpp, BOOL fullscreen)
-   {
+{
     WNDCLASSEX  wndclass;
     DWORD       dwStyle, dwExStyle;
     int         x, y, sx, sy, ex, ey;
@@ -474,7 +484,7 @@ BOOL CreateMainWindow(int width, int height, int bpp, BOOL fullscreen)
     wndclass.cbClsExtra    = 0;
     wndclass.cbWndExtra    = 0;
     wndclass.hInstance     = WinData.hInstance;
-    wndclass.hIcon         = 0;
+    wndclass.hIcon         = g_hIcon;
     wndclass.hCursor       = LoadCursor (NULL, IDC_ARROW);
     wndclass.hbrBackground = (void *)COLOR_GRAYTEXT;
     wndclass.lpszMenuName  = NULL;
@@ -483,25 +493,24 @@ BOOL CreateMainWindow(int width, int height, int bpp, BOOL fullscreen)
 
 
     if (!RegisterClassEx (&wndclass))
-       {
+    {
         MessageBox(NULL, "Window class registration failed.", "FATAL ERROR", MB_OK);
         return FALSE;
-       }
+    }
 
     if (fullscreen)
-       {
+    {
         if (notop)
-           {
             dwExStyle = WS_EX_TOPMOST;
-           }
+   
         dwExStyle = 0;
         dwStyle = WS_POPUP | WS_VISIBLE;
         x = y = 0;
         sx = video.width;
         sy = video.height;
-       }
+    }
     else
-       {
+    {
         dwExStyle = 0;
         //dwStyle = WS_CAPTION | WS_SYSMENU | WS_THICKFRAME;  // Use this if you want a "normal" window
         dwStyle = WS_CAPTION;
@@ -515,16 +524,16 @@ BOOL CreateMainWindow(int width, int height, int bpp, BOOL fullscreen)
         //   Check to be sure the requested window size fits on the screen and
         //   adjust each dimension to fit if the requested size does not fit.
         if (sx >= DevInfo.width)
-           {
+        {
             x = 0;
             sx = DevInfo.width-ex;
-           }
+        }
         if (sy >= DevInfo.height)
-           {
+        {
             y = 0;
             sy = DevInfo.height-ey;
-           }
-       }
+        }
+    }
 
     if ((WinData.hWnd = CreateWindowEx (dwExStyle,
                     szAppName,               // window class name
@@ -539,11 +548,14 @@ BOOL CreateMainWindow(int width, int height, int bpp, BOOL fullscreen)
                     WinData.hInstance,       // program instance handle
 		            NULL))                   // creation parameters
                     == NULL)
-        {
-         ChangeDisplaySettings(0, 0);
-         MessageBox(NULL, "Window creation failed.", "FATAL ERROR", MB_OK);
-         return FALSE;
-        }
+    {
+        ChangeDisplaySettings(0, 0);
+        MessageBox(NULL, "Window creation failed.", "FATAL ERROR", MB_OK);
+        return FALSE;
+    }
+
+    SendMessage(WinData.hWnd, WM_SETICON, ICON_SMALL, (LPARAM)g_hIcon);
+    SendMessage(WinData.hWnd, WM_SETICON, ICON_BIG, (LPARAM)g_hIcon);
 
     WinData.hAccel = LoadAccelerators(WinData.hInstance,"AppAccel");
 
@@ -553,24 +565,26 @@ BOOL CreateMainWindow(int width, int height, int bpp, BOOL fullscreen)
     con_printf("Starting OpenGL...\n");
     ShowCursor(FALSE);
     if (StartUpOpenGL(WinData.hWnd) == FALSE)
-       {
+    {
         WinData.hWnd = NULL;
         return FALSE;
-       }
+    }
 
     if ((software == TRUE) && (video.allowsoft == FALSE))
-       {
+    {
         I_ShutdownGraphics();
         return FALSE;
-       }
+    }
 
     ShowWindow(WinData.hWnd, WinData.iCmdShow);
     UpdateWindow(WinData.hWnd);
 
     SetForegroundWindow(WinData.hWnd);
     SetFocus(WinData.hWnd);
+
     return TRUE;
-   }
+}
+
 
 void InitData(HINSTANCE hInstance, int iCmdShow)
    {

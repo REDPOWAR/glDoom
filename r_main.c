@@ -1880,66 +1880,6 @@ void R_BuildRenderQueue()
    }
 
 
-void DrawPartitionLine(node_t* pnode)
-{
-    /*float x1, y1, x2, y2;
-
-    x1 = pnode->x >> FRACBITS;
-    y1 = -1 * (pnode->y >> FRACBITS);
-    x2 = (pnode->x + pnode->dx) >> FRACBITS;
-    y2 = -1 * ((pnode->y + pnode->dy) >> FRACBITS);
-
-    glDisable(GL_TEXTURE_2D);
-    glColor3f(1.0f, 0.0, 1.0f);
-    glBegin(GL_LINES);
-    glVertex3f(x1, 0.0, y1);
-    glVertex3f(x2, 0.0, y2);
-    glEnd(GL_LINES);
-    glEnable(GL_TEXTURE_2D);
-    glColor3f(1.0f, 1.0f, 1.0f);
-
-    if ((pnode->children[0] & 0x8000) == 0)
-        DrawPartitionLine(nodes + pnode->children[0]);
-
-    if ((pnode->children[1] & 0x8000) == 0)
-        DrawPartitionLine(nodes + pnode->children[1]);*/
-
-    int i;
-
-    glDisable(GL_TEXTURE_2D);
-    glColor3f(1.0f, 0.0, 1.0f);
-    glBegin(GL_LINES);
-    for (i = 0; i < numnodes; i++)
-    {
-        float x1, y1, x2, y2;
-
-        x1 = nodes[i].x >> FRACBITS;
-        y1 = -1 * (nodes[i].y >> FRACBITS);
-        x2 = (nodes[i].x + nodes[i].dx) >> FRACBITS;
-        y2 = -1 * ((nodes[i].y + nodes[i].dy) >> FRACBITS);
-
-        glVertex3f(x1, 0.0, y1);
-        glVertex3f(x2, 0.0, y2);
-    }
-
-    /*glColor3f(1.0f, 0.0, 0.0f);
-    glVertex3f(0.0, 0.0, 0.0);
-    glVertex3f(100.0f, 0.0, 0.0);
-
-    glColor3f(0.0f, 1.0, 0.0f);
-    glVertex3f(0.0, 0.0, 0.0);
-    glVertex3f(0.0f, 100.0, 0.0);
-
-    glColor3f(0.0f, 0.0, 1.0f);
-    glVertex3f(0.0, 0.0, 0.0);
-    glVertex3f(0.0f, 0.0, 100.0f);*/
-
-    glEnd(GL_LINES);
-    glEnable(GL_TEXTURE_2D);
-    glColor3f(1.0f, 1.0f, 1.0f);
-}
-
-
 void GL_RenderPlayerView(player_t* player)
    {
     int           i, j, iview, texnumb, sector, subsector, lin;

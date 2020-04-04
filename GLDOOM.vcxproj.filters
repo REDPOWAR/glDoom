@@ -502,6 +502,9 @@
     <ClInclude Include="memory.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="resource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="gldfont.bin">
@@ -521,5 +524,10 @@
     <Text Include="newlumps.txt" />
     <Text Include="relnotes_94e.txt" />
     <Text Include="TodoList.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="glDoom.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
   </ItemGroup>
 </Project>
