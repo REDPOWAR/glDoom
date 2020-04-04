@@ -2284,24 +2284,13 @@ void GLBSP_CutOutSubsectorPoly(int subsector, polygon_t* ppoly)
     {
         pline = pseg->linedef;
 
-        if (pline->sidenum[1] != -1 &&
-            (sides[pline->sidenum[0]].sector == sides[pline->sidenum[1]].sector))
+        if (pline->sidenum[1] != -1)
             continue;
-
-        if (pseg->side)
-        {
-            line.x  = FIXED_TO_FLOAT(pline->v2->x);
-            line.y  = FIXED_TO_FLOAT(pline->v2->y);
-            line.dx = -FIXED_TO_FLOAT(pline->dx);
-            line.dy = -FIXED_TO_FLOAT(pline->dy);
-        }
-        else
-        {
-            line.x  = FIXED_TO_FLOAT(pline->v1->x);
-            line.y  = FIXED_TO_FLOAT(pline->v1->y);
-            line.dx = FIXED_TO_FLOAT(pline->dx);
-            line.dy = FIXED_TO_FLOAT(pline->dy);
-        }
+       
+        line.x  = FIXED_TO_FLOAT(pline->v1->x);
+        line.y  = FIXED_TO_FLOAT(pline->v1->y);
+        line.dx = FIXED_TO_FLOAT(pline->dx);
+        line.dy = FIXED_TO_FLOAT(pline->dy);
 
         GLBSP_CutOutPolygonByLine(&line, ppoly);
     }
