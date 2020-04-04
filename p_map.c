@@ -64,7 +64,7 @@ line_t*		ceilingline;
 
 // keep track of special lines as they are hit,
 // but don't process them until the move is proven valid
-#define MAXSPECIALCROSS		8
+#define MAXSPECIALCROSS		16
 
 line_t*		spechit[MAXSPECIALCROSS];
 int		numspechit;
@@ -237,11 +237,8 @@ dboolean PIT_CheckLine (line_t* ld)
 	tmdropoffz = lowfloor;
 		
     // if contacted a special line, add it to the list
-    if (ld->special)
-    {
-	spechit[numspechit] = ld;
-	numspechit++;
-    }
+    if (ld->special && numspechit < MAXSPECIALCROSS)
+	    spechit[numspechit++] = ld;
 
     return true;
 }
