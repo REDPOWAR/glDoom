@@ -26,6 +26,7 @@
 #include <gl/glu.h>
 
 #include <stdlib.h>
+#include <math.h>
 
 #include "doomtype.h"
 #include "gconsole.h"
@@ -80,8 +81,9 @@ dboolean             software = false;
 
 glmode_t             glmode;
 
-double               glFov = 67.5;        // Rendering field of view
-float                SetBack = -182.0f;   // 3D setback for 2D displays
+double               glFovY;    // Rendering field of view
+float                SetBack;   // 3D setback for 2D displays
+float                glLeft, glTop, glRight, glBottom, glAspect;
 
 // Windows stuff
 extern int           iCurrMode;
@@ -119,12 +121,16 @@ void I_Start2DFrame()
     glTranslatef( 0.0f, 0.0f, 0.0f );
    }
 
+
 void I_Start3DFrame()
-   {
+{
+    glFovY   = video.fovy;
+    glAspect = (float)video.width / (float)video.height;
+
     glMatrixMode( GL_PROJECTION );
     glLoadIdentity();
 
-    gluPerspective( (double)video.fovy, (double)video.width/(double)video.height, (double)video.nearclip, (double)video.farclip );
+    gluPerspective((double)glFovY, (double)glAspect, (double)video.nearclip, (double)video.farclip );
     glViewport( 0, 0, video.width, video.height);
 
     glTranslatef( 0.0f, 0.0f, 2.0f );
@@ -134,7 +140,17 @@ void I_Start3DFrame()
     glLoadIdentity();
 
     glTranslatef( 0.0f, 0.0f, 0.0f );
-   }
+
+    SetBack  = -120.0f / tanf(DEG2RAD(glFovY * 0.5f));
+    SetBack -= 2.0f;
+
+    glTop    = 120.0f;
+    glBottom = -glTop;
+
+    glRight = glTop * glAspect;
+    glLeft = -glRight;
+}
+
 
 //
 // I_StartFrame

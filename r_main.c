@@ -51,6 +51,9 @@ static const char rcsid[] = "$Id: r_main.c,v 1.5 1997/02/03 22:45:12 b1 Exp $";
 #define FIELDOFVIEW		2048
 #define SBARHEIGHT      32 // also defined in r_draw.c rather than r_draw.h (BAD)
 
+
+extern float SetBack, glLeft, glTop, glRight, glBottom;
+
 video_t  video;
 
 int			viewangleoffset;
@@ -899,171 +902,35 @@ void R_SetupFrame (player_t* player)
     validcount++;
    }
 
-extern float SetBack;
+extern float SetBack, glTop, glLeft, glRight, glBottom, glAspect;
 extern int  GL_SkyTexture[4], GL_SkyParts, GL_SkyTop;
-//float       fSkyHigh = 164.0f, fSkyLow = -33.6f, fSkyBottom;
-float       fSkyHigh = 120.0f, fSkyLow = -120.0f, fSkyBottom;
 extern dboolean RedBias, GreenBias, WhiteBias;
 
+
 void GL_DrawSky(float compass)
-   {
+{
     int   bquad, equad, tcomp;
     float lcomp, rcomp, remainder;
     float tseam, middle;
 
+    float fSkyTop, fSkyBottom, fSkyMiddle, fSkyHalfHeight;
+    float fSkyHeightScale, fDefaultAspect;
+
+    fDefaultAspect  = 320.0f / 240.0f;
+    fSkyHalfHeight  = (2.0f - 0.5f) * 0.5f;
+    fSkyMiddle      = 0.5f + fSkyHalfHeight;
+    fSkyHeightScale = fDefaultAspect / glAspect;
+    fSkyTop         = fSkyMiddle + fSkyHalfHeight * fSkyHeightScale;
+    fSkyBottom      = fSkyMiddle - fSkyHalfHeight * fSkyHeightScale;
+
+    if (fSkyTop > 2.0f)
+        fSkyTop = 2.0f;
+
+    if (fSkyBottom < 0.5f)
+        fSkyBottom = 0.5f;
+
     glPushMatrix();
     glColor3f( 1.0f, 1.0f, 1.0f );
-
-/*
-    glBindTexture(GL_TEXTURE_2D, GL_SkyTexture[0]);
-    if (bSkyEight)
-       {
-        fSkyHigh = 164.0f;
-        fSkyBottom = fSkyHigh - 1.0f;
-        glBegin( GL_QUADS );
-           glTexCoord2f( 0.0f, 1.0f);
-           glVertex3f(-175.0f, fSkyHigh,-175.0f);
-           glTexCoord2f( 0.0f, 0.0f);
-           glVertex3f(-175.0f, fSkyLow,-175.0f);
-           glTexCoord2f( 0.5f, 0.0f);
-           glVertex3f(   0.0f, fSkyLow,-247.5f);
-           glTexCoord2f( 0.5f, 1.0f);
-           glVertex3f(   0.0f, fSkyHigh,-247.5f);
-
-           glTexCoord2f( 0.5f, 1.0f);
-           glVertex3f(   0.0f, fSkyHigh,-247.5f);
-           glTexCoord2f( 0.5f, 0.0f);
-           glVertex3f(   0.0f, fSkyLow,-247.5f);
-           glTexCoord2f( 1.0f, 0.0f);
-           glVertex3f( 175.0f, fSkyLow,-175.0f);
-           glTexCoord2f( 1.0f, 1.0f);
-           glVertex3f( 175.0f, fSkyHigh,-175.0f);
-        glEnd();
-
-        glBegin( GL_QUADS );
-           glTexCoord2f( 0.0f, 1.0f);
-           glVertex3f(-175.0f, fSkyHigh,   175.0f);
-           glTexCoord2f( 0.0f, 0.0f);
-           glVertex3f(-175.0f, fSkyLow,    175.0f);
-           glTexCoord2f( 0.5f, 0.0f);
-           glVertex3f(-247.5f, fSkyLow,     0.0f);
-           glTexCoord2f( 0.5f, 1.0f);
-           glVertex3f(-247.5f, fSkyHigh,    0.0f);
-
-           glTexCoord2f( 0.5f, 1.0f);
-           glVertex3f( -247.f, fSkyHigh,    0.0f);
-           glTexCoord2f( 0.5f, 0.0f);
-           glVertex3f( -247.5f, fSkyLow,    0.0f);
-           glTexCoord2f( 1.0f, 0.0f);
-           glVertex3f( -175.0f, fSkyLow, -175.0f);
-           glTexCoord2f( 1.0f, 1.0f);
-           glVertex3f( -175.0f, fSkyHigh,-175.0f);
-        glEnd();
-
-        glBegin( GL_QUADS );
-           glTexCoord2f( 0.0f, 1.0f);
-           glVertex3f( 175.0f, fSkyHigh, 175.0f);
-           glTexCoord2f( 0.0f, 0.0f);
-           glVertex3f( 175.0f, fSkyLow, 175.0f);
-           glTexCoord2f( 0.5f, 0.0f);
-           glVertex3f(   0.0f, fSkyLow, 247.5f);
-           glTexCoord2f( 0.5f, 1.0f);
-           glVertex3f(   0.0f, fSkyHigh, 247.5f);
-
-           glTexCoord2f( 0.5f, 1.0f);
-           glVertex3f(   0.0f, fSkyHigh, 247.5f);
-           glTexCoord2f( 0.5f, 0.0f);
-           glVertex3f(   0.0f, fSkyLow, 247.5f);
-           glTexCoord2f( 1.0f, 0.0f);
-           glVertex3f(-175.0f, fSkyLow, 175.0f);
-           glTexCoord2f( 1.0f, 1.0f);
-           glVertex3f(-175.0f, fSkyHigh, 175.0f);
-        glEnd();
-
-        glBegin( GL_QUADS );
-           glTexCoord2f( 0.0f, 1.0f);
-           glVertex3f( 175.0f, fSkyHigh,-175.0f);
-           glTexCoord2f( 0.0f, 0.0f);
-           glVertex3f( 175.0f, fSkyLow,-175.0f);
-           glTexCoord2f( 0.5f, 0.0f);
-           glVertex3f( 247.5f, fSkyLow,   0.0f);
-           glTexCoord2f( 0.5f, 1.0f);
-           glVertex3f( 247.5f, fSkyHigh,   0.0f);
-
-           glTexCoord2f( 0.5f, 1.0f);
-           glVertex3f( 247.5f, fSkyHigh,   0.0f);
-           glTexCoord2f( 0.5f, 0.0f);
-           glVertex3f( 247.5f, fSkyLow,   0.0f);
-           glTexCoord2f( 1.0f, 0.0f);
-           glVertex3f( 175.0f, fSkyLow, 175.0f);
-           glTexCoord2f( 1.0f, 1.0f);
-           glVertex3f( 175.0f, fSkyHigh, 175.0f);
-        glEnd();
-
-        glBindTexture(GL_TEXTURE_2D, GL_SkyTop);
-        glBegin( GL_TRIANGLES );
-           glTexCoord2f( 0.0f, 1.0f);
-           glVertex3f(-175.0f, fSkyBottom, 175.0f);
-           glTexCoord2f( 0.0f, 0.5f);
-           glVertex3f(-247.5f, fSkyBottom,   0.0f);
-           glTexCoord2f( 0.5f, 0.5f);
-           glVertex3f(   0.0f, fSkyBottom,   0.0f);
-
-           glTexCoord2f( 0.0f, 0.5f);
-           glVertex3f(-247.5f, fSkyBottom,   0.0f);
-           glTexCoord2f( 0.0f, 0.0f);
-           glVertex3f(-175.0f, fSkyBottom,-175.0f);
-           glTexCoord2f( 0.5f, 0.5f);
-           glVertex3f(   0.0f, fSkyBottom,   0.0f);
-
-           glTexCoord2f( 0.0f, 0.0f);
-           glVertex3f(-175.0f, fSkyBottom,-175.0f);
-           glTexCoord2f( 0.5f, 0.0f);
-           glVertex3f(   0.0f, fSkyBottom,-247.5f);
-           glTexCoord2f( 0.5f, 0.5f);
-           glVertex3f(   0.0f, fSkyBottom,   0.0f);
-
-           glTexCoord2f( 0.5f, 0.0f);
-           glVertex3f(   0.0f, fSkyBottom,-247.5f);
-           glTexCoord2f( 1.0f, 0.0f);
-           glVertex3f( 175.0f, fSkyBottom,-175.0f);
-           glTexCoord2f( 0.5f, 0.5f);
-           glVertex3f(   0.0f, fSkyBottom,   0.0f);
-
-           glTexCoord2f( 1.0f, 0.0f);
-           glVertex3f( 175.0f, fSkyBottom,-175.0f);
-           glTexCoord2f( 1.0f, 0.5f);
-           glVertex3f( 247.5f, fSkyBottom,   0.0f);
-           glTexCoord2f( 0.5f, 0.5f);
-           glVertex3f(   0.0f, fSkyBottom,   0.0f);
-
-           glTexCoord2f( 1.0f, 0.5f);
-           glVertex3f( 247.5f, fSkyBottom,   0.0f);
-           glTexCoord2f( 1.0f, 1.0f);
-           glVertex3f( 175.0f, fSkyBottom, 175.0f);
-           glTexCoord2f( 0.5f, 0.5f);
-           glVertex3f(   0.0f, fSkyBottom,   0.0f);
-
-           glTexCoord2f( 1.0f, 1.0f);
-           glVertex3f( 175.0f, fSkyBottom, 175.0f);
-           glTexCoord2f( 0.5f, 1.0f);
-           glVertex3f(   0.0f, fSkyBottom, 247.5f);
-           glTexCoord2f( 0.5f, 0.5f);
-           glVertex3f(   0.0f, fSkyBottom,   0.0f);
-
-           glTexCoord2f( 0.5f, 1.0f);
-           glVertex3f(   0.0f, fSkyBottom, 247.5f);
-           glTexCoord2f( 0.0f, 1.0f);
-           glVertex3f(-175.0f, fSkyBottom, 175.0f);
-           glTexCoord2f( 0.5f, 0.5f);
-           glVertex3f(   0.0f, fSkyBottom,   0.0f);
-        glEnd();
-       }
-    else
-       {
-*/
-        fSkyHigh = 128.0f;
-        fSkyBottom = fSkyHigh - 1.0f;
 
     lcomp = compass - 45.0f;
     if (lcomp < 0.0f)
@@ -1081,113 +948,53 @@ void GL_DrawSky(float compass)
     equad %= 4;
 
     if (bquad == equad)
-       {
+    {
         glBindTexture(GL_TEXTURE_2D, GL_SkyTexture[bquad]);
         glBegin( GL_QUADS );
-           glTexCoord2f( 1.0f, 2.0f);
-           glVertex3f(-175.0f, fSkyHigh,SetBack);
-           glTexCoord2f( 1.0f, 0.5f);
-           glVertex3f(-175.0f, fSkyLow, SetBack);
-           glTexCoord2f( 0.0f, 0.5f);
-           glVertex3f( 175.0f, fSkyLow, SetBack);
-           glTexCoord2f( 0.0f, 2.0f);
-           glVertex3f( 175.0f, fSkyHigh,SetBack);
+           glTexCoord2f(1.0f, fSkyTop);
+           glVertex3f(glLeft, glTop, SetBack);
+           glTexCoord2f(1.0f, fSkyBottom);
+           glVertex3f(glLeft, glBottom, SetBack);
+           glTexCoord2f(0.0f, fSkyBottom);
+           glVertex3f(glRight, glBottom, SetBack);
+           glTexCoord2f(0.0f, fSkyTop);
+           glVertex3f(glRight, glTop, SetBack);
         glEnd();
-       }
+    }
     else
-       {
+    {
         tcomp = (((int)lcomp / 90) * 90);
         tseam =  (lcomp - (float)tcomp) / 90.0f;
-        middle =  175.0f - (350.0f * tseam);
+        middle =  glRight - ((glRight - glLeft) * tseam);
         tseam = 1.0f - tseam;
+
         glBindTexture(GL_TEXTURE_2D, GL_SkyTexture[bquad]);
         glBegin( GL_QUADS );
-           glTexCoord2f( tseam, 2.0f);
-           glVertex3f(-175.0f, fSkyHigh,SetBack);
-           glTexCoord2f( tseam, 0.5f);
-           glVertex3f(-175.0f, fSkyLow, SetBack);
-           glTexCoord2f( 0.0f, 0.5f);
-           glVertex3f( middle, fSkyLow, SetBack);
-           glTexCoord2f( 0.0f, 2.0f);
-           glVertex3f( middle, fSkyHigh,SetBack);
+           glTexCoord2f(tseam, fSkyTop);
+           glVertex3f(glLeft, glTop, SetBack);
+           glTexCoord2f(tseam, fSkyBottom);
+           glVertex3f(glLeft, glBottom, SetBack);
+           glTexCoord2f(0.0f, fSkyBottom);
+           glVertex3f(middle, glBottom, SetBack);
+           glTexCoord2f(0.0f, fSkyTop);
+           glVertex3f(middle, glTop, SetBack);
         glEnd();
         glBindTexture(GL_TEXTURE_2D, GL_SkyTexture[equad]);
         glBegin( GL_QUADS );
-           glTexCoord2f( 1.0f, 2.0f);
-           glVertex3f( middle, fSkyHigh,SetBack);
-           glTexCoord2f( 1.0f, 0.5f);
-           glVertex3f( middle, fSkyLow, SetBack);
-           glTexCoord2f( tseam, 0.5f);
-           glVertex3f( 175.0f, fSkyLow, SetBack);
-           glTexCoord2f( tseam, 2.0f);
-           glVertex3f( 175.0f, fSkyHigh,SetBack);
+           glTexCoord2f(1.0f, fSkyTop);
+           glVertex3f(middle, glTop, SetBack);
+           glTexCoord2f(1.0f, fSkyBottom);
+           glVertex3f(middle, glBottom, SetBack);
+           glTexCoord2f(tseam, fSkyBottom);
+           glVertex3f(glRight, glBottom, SetBack);
+           glTexCoord2f( tseam, fSkyTop);
+           glVertex3f(glRight, glTop ,SetBack);
         glEnd();
-       }
-/*
-        glBindTexture(GL_TEXTURE_2D, GL_SkyTexture[3]);
-        glBegin( GL_QUADS );
-           glTexCoord2f( 0.0f, 1.0f);
-           glVertex3f(-175.0f, fSkyHigh, 175.0f);
-           glTexCoord2f( 0.0f, 0.0f);
-           glVertex3f(-175.0f, fSkyLow,  175.0f);
-           glTexCoord2f( 1.0f, 0.0f);
-           glVertex3f(-175.0f, fSkyLow, -175.0f);
-           glTexCoord2f( 1.0f, 1.0f);
-           glVertex3f(-175.0f, fSkyHigh,-175.0f);
-        glEnd();
+    }
 
-        glBindTexture(GL_TEXTURE_2D, GL_SkyTexture[2]);
-        glBegin( GL_QUADS );
-           glTexCoord2f( 0.0f, 1.0f);
-           glVertex3f( 175.0f, fSkyHigh, 175.0f);
-           glTexCoord2f( 0.0f, 0.0f);
-           glVertex3f( 175.0f, fSkyLow,  175.0f);
-           glTexCoord2f( 1.0f, 0.0f);
-           glVertex3f(-175.0f, fSkyLow,  175.0f);
-           glTexCoord2f( 1.0f, 1.0f);
-           glVertex3f(-175.0f, fSkyHigh, 175.0f);
-        glEnd();
-
-        glBindTexture(GL_TEXTURE_2D, GL_SkyTexture[1]);
-        glBegin( GL_QUADS );
-           glTexCoord2f( 0.0f, 1.0f);
-           glVertex3f( 175.0f, fSkyHigh,-175.0f);
-           glTexCoord2f( 0.0f, 0.0f);
-           glVertex3f( 175.0f, fSkyLow, -175.0f);
-           glTexCoord2f( 1.0f, 0.0f);
-           glVertex3f( 175.0f, fSkyLow,  175.0f);
-           glTexCoord2f( 1.0f, 1.0f);
-           glVertex3f( 175.0f, fSkyHigh, 175.0f);
-        glEnd();
-
-        glBindTexture(GL_TEXTURE_2D, GL_SkyTexture[0]);
-        glBegin( GL_QUADS );
-           glTexCoord2f( 0.0f, 1.0f);
-           glVertex3f(-175.0f, fSkyHigh,-175.0f);
-           glTexCoord2f( 0.0f, 0.0f);
-           glVertex3f(-175.0f, fSkyLow, -175.0f);
-           glTexCoord2f( 1.0f, 0.0f);
-           glVertex3f( 175.0f, fSkyLow, -175.0f);
-           glTexCoord2f( 1.0f, 1.0f);
-           glVertex3f( 175.0f, fSkyHigh,-175.0f);
-        glEnd();
-*/
-/*
-        glBindTexture(GL_TEXTURE_2D, GL_SkyTop);
-        glBegin( GL_QUADS );
-           glTexCoord2f( 0.0f, 1.0f);
-           glVertex3f(-175.0f, fSkyBottom,  175.0f);
-           glTexCoord2f( 0.0f, 0.0f);
-           glVertex3f(-175.0f, fSkyBottom, -175.0f);
-           glTexCoord2f( 1.0f, 0.0f);
-           glVertex3f( 175.0f, fSkyBottom, -175.0f);
-           glTexCoord2f( 1.0f, 1.0f);
-           glVertex3f( 175.0f, fSkyBottom,  175.0f);
-        glEnd();
-       }
-*/
     glPopMatrix();
-   }
+}
+
 
 extern DW_TexList      TexList[1024];
 
@@ -2359,21 +2166,22 @@ void GL_RenderPlayerView(player_t* player)
        }
 
     if ((GreenBias == true) || (RedBias == true))
-       {
+    {
         glDisable(GL_TEXTURE_2D);
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
         glBegin(GL_QUADS);
-           glVertex3f(-160.0f,  120.0f, -172.0f);
-           glVertex3f(-160.0f, -120.0f, -172.0f);
-           glVertex3f( 160.0f, -120.0f, -172.0f);
-           glVertex3f( 160.0f,  120.0f, -172.0f);
+           glVertex3f(glLeft,  glTop,    SetBack);
+           glVertex3f(glLeft,  glBottom, SetBack);
+           glVertex3f(glRight, glBottom, SetBack);
+           glVertex3f(glRight, glTop,    SetBack);
         glEnd(); 
         glDisable(GL_BLEND);
-       }
+    }
+
     glPopMatrix();
-   }
+}
 
 /*
 float AngleTo( float x1, float z1, float x2, float z2 );

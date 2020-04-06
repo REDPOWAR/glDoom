@@ -643,10 +643,11 @@ void InitData(HINSTANCE hInstance, int iCmdShow)
 		video.wide = TRUE;
 	}
 
-    video.bpp           = DEF_COLORB;
-    video.fov           = 90;
-    video.fovy = video.fov / ((float)video.width / (float)video.height);
-   }
+    video.bpp  = DEF_COLORB;
+    video.fov  = 90;
+    video.fovy = video.fov * ((float)video.height / (float)video.width);
+}
+
 
 // could just do myargc = __argc and myargv = __argv
 void ParseCommand(PSTR szCmdLine)
@@ -733,15 +734,15 @@ void EvaluateParameters(PSTR szCmdLine)
 
     p = M_CheckParm("-fov");
     if (p && p < myargc-1)
-       {
+    {
         video.fov = atof(myargv[p+1]);
         if (video.fov < FOV_MIN || video.fov > FOV_MAX)
-           {
             video.fov = FOV_DEF;
-           }
-        video.fovy = video.fov * ((float)video.height / (float)video.width);
-       }
-   }
+
+    }
+
+    video.fovy = video.fov * ((float)video.height / (float)video.width);
+}
 
 void glDoomExit()
    {
