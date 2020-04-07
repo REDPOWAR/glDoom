@@ -69,10 +69,10 @@ BEGIN
             VALUE "LegalCopyright", "Copyright © 1998-2010  - Bruce A. Lewis"
             VALUE "LegalTrademarks", "Doom is a Trademark of id Software, Inc.; Doom is Copyright © 1993, id Software"
             VALUE "OriginalFilename", "glDoom.exe"
-            VALUE "PrivateBuild", "095B"
+            VALUE "PrivateBuild", "095C"
             VALUE "ProductName", "Bruce Lewis, glDoom"
             VALUE "ProductVersion", "0, 9, 5, 0"
-            VALUE "SpecialBuild", "095B1"
+            VALUE "SpecialBuild", "095C1"
         END
     END
     BLOCK "VarFileInfo"

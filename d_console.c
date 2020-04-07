@@ -68,7 +68,7 @@ extern int TexWide, TexHigh;
 #define CONSOLE_BORD "FLAT18"
 #define CONSBORD     2
 #define CONSVERS     95
-#define CONSREV      'B'
+#define CONSREV      'C'
 #define CONSMSGS     64
 
 char szProgName[] = "GLDOOM";
