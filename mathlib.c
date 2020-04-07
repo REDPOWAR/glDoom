@@ -150,3 +150,10 @@ void ml_CrossProduct (ml_vec3_t v1, ml_vec3_t v2, ml_vec3_t result)
     result[2] = (v1[0] * v2[1]) - (v1[1] * v2[0]);
    }
 
+
+float ml_MakeFovY(float fovX, float aspect)
+{
+    float rad = atanf(tanf(DEG2RAD(fovX * 0.5f)) / aspect);
+
+    return RAD2DEG(rad) * 2.0f;
+}

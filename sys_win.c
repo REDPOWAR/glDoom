@@ -48,6 +48,7 @@
 #include "r_main.h"
 
 #include "gl_video.h"
+#include "mathlib.h"
 #include "win_inpt.h"
 #include "win_video.h"
 
@@ -645,7 +646,7 @@ void InitData(HINSTANCE hInstance, int iCmdShow)
 
     video.bpp  = DEF_COLORB;
     video.fov  = 90;
-    video.fovy = video.fov * ((float)video.height / (float)video.width);
+    video.fovy = ml_MakeFovY(video.fov, (float)video.width / (float)video.height);
 }
 
 
@@ -741,7 +742,7 @@ void EvaluateParameters(PSTR szCmdLine)
 
     }
 
-    video.fovy = video.fov * ((float)video.height / (float)video.width);
+    video.fovy = ml_MakeFovY(video.fov, (float)video.width / (float)video.height);
 }
 
 void glDoomExit()
