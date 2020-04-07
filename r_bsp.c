@@ -266,7 +266,7 @@ void R_AddLine (seg_t*	line)
     angle_t		angle2;
     angle_t		span;
     angle_t		tspan;
-    int         sector;
+    int         subsector;
     //float       fangle1, fangle2, vangle;
 
     curline = line;
@@ -401,9 +401,6 @@ void R_AddLine (seg_t*	line)
        {
         goto clippass;	
        }
-		
-    sector = frontsector-sectors;
-    DrawFlat[sector] = true;
 
     // Reject empty lines used for triggers and special events.
     // Identical floor and ceiling on both sides,
@@ -416,16 +413,12 @@ void R_AddLine (seg_t*	line)
        }
 				
     clippass:
-       sector = frontsector-sectors;
-       DrawFlat[sector] = true;
-       R_ClipPassWallSegment (x1, x2-1);	
-       return;
+        R_ClipPassWallSegment (x1, x2-1);	
+        return;
 		
     clipsolid:
-       sector = frontsector-sectors;
-       DrawFlat[sector] = true;
-       R_ClipSolidWallSegment (x1, x2-1);
-       return;
+        R_ClipSolidWallSegment (x1, x2-1);
+        return;
    }
 
 
@@ -598,6 +591,7 @@ void R_Subsector (int num)
     else
         ceilingplane = NULL;
 		
+    DrawFlat[frontsector - sectors] = true;
     R_AddSprites (frontsector);	
 
     while (count--)

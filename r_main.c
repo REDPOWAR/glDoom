@@ -1583,21 +1583,21 @@ void R_BuildRenderQueue()
     float         fh, ch;
 
     for (i = 0; i < numsides; i++)
-       DrawSide[i] = ds_unknown;
+        if (DrawSide[i] == ds_unknown)
+            DrawSide[i] = ds_nodraw;
 
     // a common vertex pool would be quicker
     // for culling
 
     TempPoly = PolyList;
     while (TempPoly != 0)
-       {
+    {
         // Check left and right sides for inside the frustum
         //inside = (DrawSide[TempPoly->SideDef] == ds_draw);
         inside = R_ClipVertsToFrustum(TempPoly);
 
-        if (inside)
-           {
-            DrawSide[TempPoly->SideDef] = ds_draw;
+        if (inside && DrawSide[TempPoly->SideDef] == ds_draw)
+        {
             wallhigh = TempPoly->Point[0].v[1] - TempPoly->Point[1].v[1];
             switch(TempPoly->Position)
                {
@@ -1682,6 +1682,10 @@ void R_BuildRenderQueue()
                 TempPoly->coloff = sides[TempPoly->SideDef].textureoffset;
                }
            }
+
+        if (!inside)
+            DrawSide[TempPoly->SideDef] = ds_nodraw;
+
         TempPoly = TempPoly->Next;
        }
    }
@@ -2016,7 +2020,7 @@ void GL_RenderPlayerView(player_t* player)
 
     for (sector = 0, psector = sectors; sector < numsectors; sector++, psector++)
     {
-        if ((DrawFlat[sector] == true) && (psector->floorheight != psector->ceilingheight))
+        if (DrawFlat[sector] && psector->floorheight != psector->ceilingheight)
         {
             glPolygonOffset(offsetf,offsetu);
 
@@ -2092,6 +2096,7 @@ void GL_RenderPlayerView(player_t* player)
                 for (subsector = 0; subsector < planes[sector].ss_count; subsector++)
                 {
                     psubsector = planes[sector].subsectors[subsector];
+
                     if (psector->ceilingpic == skyflatnum)
                         continue;
 
@@ -2129,9 +2134,9 @@ void GL_RenderPlayerView(player_t* player)
             }
         }
 
-        DrawFlat[sector] = false;
     }
 
+    ZeroMemory(DrawFlat, sizeof(dboolean) * numsectors);
 
     if (gl_modeltest)
        {
