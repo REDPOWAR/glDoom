@@ -86,6 +86,7 @@ line_t*		lines;
 
 int		numsides;
 side_t*		sides;
+int     lastsides = 0;
 
 
 // BLOCKMAP
@@ -751,15 +752,19 @@ float InnerProduct(float *f, float *m, float *e);
 
 RECT              *SectorBBox = 0;
 
-drawside_t        *DrawSide = 0;
-dboolean              *DrawFlat = 0;
+drawside_t        *DrawSide           = NULL;
+dboolean          *DrawFlat           = NULL;
+sector_plane_t   **sorted_flats       = NULL;
+int                sorted_flats_count = 0;
+
 
 DW_Vertex3Dv      *Normal = 0;
-DW_Polygon        *PolyList = 0;
-DW_FloorCeil      *FloorList = 0;
-DW_FloorCeil      *CeilList = 0;
 DW_TexList         TexList[1024];
 int                TexCount;
+
+DW_Polygon        **side_polygons      = NULL;
+DW_Polygon        **sorted_walls       = NULL;
+int                 sorted_walls_count = 0;
 
 DW_FloorCeil      *subsector_planes = NULL;
 sector_plane_t    *planes           = NULL;
@@ -1308,39 +1313,69 @@ int TextureSearchSector(int sector, int top)
 
 void CreateNewWalls()
    {
-    int         line, side, PolyCount;
+    int         line, side, PolyCount, i;
     int         Sector1, Sector2, texture;
     float       Ceil1, Ceil2, Floor1, Floor2, MiddleTop, MiddleBottom;
     DW_Polygon *TempPoly;
     char        szCeil[2][10], szFloor[2][10];
     dboolean        SkyCeil, SkyFloor;
+    
+    float   fHighestCeiling, h;
+    line_t* pline;
+    side_t* pside;
+    int     sky_sector_count;
+
+    if (numsectors > 0)
+    {
+        fHighestCeiling = FIXED_TO_FLOAT(sectors->ceilingheight);
+        for (i = 0; i < numsectors; i++)
+        {
+            h = FIXED_TO_FLOAT(sectors[i].ceilingheight);
+            if (h > fHighestCeiling)
+                fHighestCeiling = h;
+        }
+    }
 
     //lfprintf( "Number of linedefs : %d\n", numlines);
 
-    TempPoly = PolyList;
-    while (TempPoly != 0)
-       {
-        PolyList = TempPoly->Next;
-        free(TempPoly);
-        TempPoly = PolyList;
-       }
+    if (side_polygons != NULL)
+    {
+        for (i = 0; i < lastsides; i++)
+        {
+            TempPoly = side_polygons[i];
+            while (TempPoly != 0)
+            {
+                side_polygons[i] = TempPoly->Next;
+                free(TempPoly);
+                TempPoly = side_polygons[i];
+            }
+        }
+    }
+
+    ZFREE(side_polygons);
+    ZFREE(sorted_walls);
+    ZFREE(DrawSide);
+    ZFREE(Normal);
+
+    side_polygons      = (DW_Polygon**)malloc(sizeof(DW_Polygon*) * numsides);
+    ZeroMemory(side_polygons, sizeof(DW_Polygon*) * numsides);
+
+    sorted_walls       = (DW_Polygon**)malloc(sizeof(DW_Polygon*) * numsides);
+    sorted_walls_count = 0;
+
+    lastsides = numsides;
     PolyCount = 0;
 
-    if (Normal != 0)
-	{
-       free(Normal);
-	}
-    Normal = (DW_Vertex3Dv *)malloc(sizeof(DW_Vertex3Dv)*numsides);
 
-    if (DrawSide != 0)
-        free(DrawSide);
-    DrawSide = (drawside_t *)malloc(sizeof(drawside_t)*numsides);
-    for (side = 0; side < numsides; side++)
-        DrawSide[side] = ds_unknown;
+    Normal   = (DW_Vertex3Dv *)malloc(sizeof(DW_Vertex3Dv)*numsides);
+    DrawSide = (drawside_t *)malloc(sizeof(drawside_t) * numsides);
+    ZeroMemory(DrawSide, sizeof(drawside_t) * numsides);
 
 
     for (line = 0; line < numlines; line++)
-       {
+    {
+        pline = lines + line;
+
         // Generate the normal for this linedef
         NormalVector((float)(lines[line].v1->x>>FRACBITS), (float)(lines[line].v1->y>>FRACBITS)*-1.0f,
                      (float)(lines[line].v2->x>>FRACBITS), (float)(lines[line].v2->y>>FRACBITS)*-1.0f, lines[line].sidenum[0]);
@@ -1480,7 +1515,7 @@ void CreateNewWalls()
            }
 
         if (lines[line].sidenum[1] >= 0) // We have a side 2
-           {
+        {
             // Generate Polygons for the "sector1" (first) side of the "portal"
             if ((sides[lines[line].sidenum[0]].bottomtexture > 0) && (SkyFloor == false))
                {
@@ -1524,8 +1559,9 @@ void CreateNewWalls()
                 TempPoly->Point[3].v[0] = (float)(lines[line].v2->x>>FRACBITS);
                 TempPoly->Point[3].v[1] = (float)Floor2;
                 TempPoly->Point[3].v[2] = (float)(lines[line].v2->y>>FRACBITS)*-1;
-                TempPoly->Next = PolyList;
-                PolyList = TempPoly;
+
+                TempPoly->Next                   = side_polygons[TempPoly->SideDef];
+                side_polygons[TempPoly->SideDef] = TempPoly;
                 PolyCount++;
                }
 
@@ -1580,8 +1616,9 @@ void CreateNewWalls()
                 TempPoly->Point[3].v[0] = (float)(lines[line].v2->x>>FRACBITS);
                 TempPoly->Point[3].v[1] = (float)MiddleTop;
                 TempPoly->Point[3].v[2] = (float)(lines[line].v2->y>>FRACBITS)*-1;
-                TempPoly->Next = PolyList;
-                PolyList = TempPoly;
+
+                TempPoly->Next                   = side_polygons[TempPoly->SideDef];
+                side_polygons[TempPoly->SideDef] = TempPoly;
                 PolyCount++;
                }
 
@@ -1627,8 +1664,9 @@ void CreateNewWalls()
                 TempPoly->Point[3].v[0] = (float)(lines[line].v2->x>>FRACBITS);
                 TempPoly->Point[3].v[1] = (float)Ceil1;
                 TempPoly->Point[3].v[2] = (float)(lines[line].v2->y>>FRACBITS)*-1;
-                TempPoly->Next = PolyList;
-                PolyList = TempPoly;
+
+                TempPoly->Next                   = side_polygons[TempPoly->SideDef];
+                side_polygons[TempPoly->SideDef] = TempPoly;
                 PolyCount++;
                }
 
@@ -1675,8 +1713,9 @@ void CreateNewWalls()
                 TempPoly->Point[3].v[0] = (float)(lines[line].v1->x>>FRACBITS);
                 TempPoly->Point[3].v[1] = (float)Floor1;
                 TempPoly->Point[3].v[2] = (float)(lines[line].v1->y>>FRACBITS)*-1;
-                TempPoly->Next = PolyList;
-                PolyList = TempPoly;
+
+                TempPoly->Next                   = side_polygons[TempPoly->SideDef];
+                side_polygons[TempPoly->SideDef] = TempPoly;
                 PolyCount++;
                }
 
@@ -1731,8 +1770,9 @@ void CreateNewWalls()
                 TempPoly->Point[3].v[0] = (float)(lines[line].v1->x>>FRACBITS);
                 TempPoly->Point[3].v[1] = (float)MiddleTop;
                 TempPoly->Point[3].v[2] = (float)(lines[line].v1->y>>FRACBITS)*-1;
-                TempPoly->Next = PolyList;
-                PolyList = TempPoly;
+
+                TempPoly->Next                   = side_polygons[TempPoly->SideDef];
+                side_polygons[TempPoly->SideDef] = TempPoly;
                 PolyCount++;
                }
 
@@ -1778,13 +1818,16 @@ void CreateNewWalls()
                 TempPoly->Point[3].v[0] = (float)(lines[line].v1->x>>FRACBITS);
                 TempPoly->Point[3].v[1] = (float)Ceil2;
                 TempPoly->Point[3].v[2] = (float)(lines[line].v1->y>>FRACBITS)*-1;
-                TempPoly->Next = PolyList;
-                PolyList = TempPoly;
+
+                TempPoly->Next                   = side_polygons[TempPoly->SideDef];
+                side_polygons[TempPoly->SideDef] = TempPoly;
                 PolyCount++;
                }
-           }
+        }
         else
-           {
+        {
+            pside = sides + pline->sidenum[0];
+
             if (sides[lines[line].sidenum[0]].midtexture > 0)
                {
                 Sector1 = sides[lines[line].sidenum[0]].sectornumb;
@@ -1813,8 +1856,8 @@ void CreateNewWalls()
                 TempPoly->Sector = Sector1;
                 TempPoly->BackSector = -1;
 
-                Floor1 = (float)(sides[lines[line].sidenum[0]].sector->floorheight>>FRACBITS);
-                Ceil1  = (float)(sides[lines[line].sidenum[0]].sector->ceilingheight>>FRACBITS);
+                Floor1 = FIXED_TO_FLOAT(pside->sector->floorheight);
+                Ceil1  = FIXED_TO_FLOAT(pside->sector->ceilingheight);
 
                 // Top left first...
                 TempPoly->Point[0].v[0] = (float)(lines[line].v1->x>>FRACBITS);
@@ -1832,14 +1875,68 @@ void CreateNewWalls()
                 TempPoly->Point[3].v[0] = (float)(lines[line].v2->x>>FRACBITS);
                 TempPoly->Point[3].v[1] = (float)Ceil1;
                 TempPoly->Point[3].v[2] = (float)(lines[line].v2->y>>FRACBITS)*-1;
-                TempPoly->Next = PolyList;
-                PolyList = TempPoly;
+
+                TempPoly->Next                   = side_polygons[TempPoly->SideDef];
+                side_polygons[TempPoly->SideDef] = TempPoly;
                 PolyCount++;
                }
-           }
-       }
+
+            
+        }
+
+        for (sky_sector_count = 0, i = 0; i < 2; i++)
+        {
+            if (pline->sidenum[i] != -1
+                && sides[pline->sidenum[i]].sector->ceilingpic == skyflatnum)
+            {
+                pside = sides + pline->sidenum[i];
+                sky_sector_count++;
+            }
+        }
+
+
+        if (sky_sector_count == 1)
+        {
+            Floor1 = FIXED_TO_FLOAT(pside->sector->floorheight);
+            Ceil1  = FIXED_TO_FLOAT(pside->sector->ceilingheight);
+
+            if (Ceil1 < fHighestCeiling)
+            {
+                TempPoly = (DW_Polygon*)malloc(sizeof(DW_Polygon));
+                TempPoly->SideDef = pline->sidenum[0];
+                TempPoly->LineDef = line;
+                TempPoly->Position = 0;
+                TempPoly->BackSector = pside->sectornumb;
+
+                // Top left first...
+                TempPoly->Point[0].v[0] = FIXED_TO_FLOAT(pline->v1->x);
+                TempPoly->Point[0].v[1] = fHighestCeiling;
+                TempPoly->Point[0].v[2] = -FIXED_TO_FLOAT(pline->v1->y);
+                // Bottom left next...
+                TempPoly->Point[1].v[0] = FIXED_TO_FLOAT(pline->v1->x);
+                TempPoly->Point[1].v[1] = Ceil1;
+                TempPoly->Point[1].v[2] = -FIXED_TO_FLOAT(pline->v1->y);
+                // Bottom right next...
+                TempPoly->Point[2].v[0] = FIXED_TO_FLOAT(pline->v2->x);
+                TempPoly->Point[2].v[1] = Ceil1;
+                TempPoly->Point[2].v[2] = -FIXED_TO_FLOAT(pline->v2->y);
+                // Top right next...
+                TempPoly->Point[3].v[0] = FIXED_TO_FLOAT(pline->v2->x);
+                TempPoly->Point[3].v[1] = fHighestCeiling;
+                TempPoly->Point[3].v[2] = -FIXED_TO_FLOAT(pline->v2->y);
+
+                TempPoly->Next = side_polygons[TempPoly->SideDef];
+                side_polygons[TempPoly->SideDef] = TempPoly;
+                PolyCount++;
+            }
+        }
+    }
+
+    
+
+
     //lfprintf( "Total generated \"wall\" polygon count: %d\n", PolyCount);
-   }
+}
    
 //#define WDEBUG 1
 
@@ -2575,9 +2672,13 @@ void CreateNewFlats()
 
     ZFREE(DrawFlat);
 
-    DrawFlat = (dboolean *)malloc(sizeof(dboolean)*numsectors);
+    DrawFlat = (dboolean *)malloc(sizeof(dboolean) * numsectors);
     for (sector = 0; sector < numsectors; sector++)
         DrawFlat[sector] = false;
+
+    ZFREE(sorted_flats);
+    sorted_flats       = (sector_plane_t**)malloc(sizeof(sector_plane_t*) * numsectors);
+    sorted_flats_count = 0;
 
     lastsectors = numsectors;
 }
@@ -2611,113 +2712,119 @@ void CalcTexCoords()
     DW_Polygon   *TempPoly;
     float         fLength, fHigh, fVertOff, fHorzOff, GLXOff, GLYOff, UnPegOff, xGrid, yGrid;
     float         GLHigh, DHigh, YRatio, YPos, YOffset;
-    int           p, sector, subsector;
+    int           p, sector, subsector, side;
     float         SectorX, SectorY;
     DW_FloorCeil *psubsector;
 
-    TempPoly = PolyList;
-    while (TempPoly != 0)
-       {
-        GLHigh = (float)TexList[TempPoly->Texture[0]].GLHigh;
-        DHigh  = (float)TexList[TempPoly->Texture[0]].DHigh;
-        YRatio = DHigh / GLHigh;
+    for (side = 0; side < numsides; side++)
+    {
+        TempPoly = side_polygons[side];
+        while (TempPoly != NULL)
+        {
+            if (TempPoly->Position)
+            {
+                GLHigh = (float)TexList[TempPoly->Texture[0]].GLHigh;
+                DHigh = (float)TexList[TempPoly->Texture[0]].DHigh;
+                YRatio = DHigh / GLHigh;
 
-        // tu = horizontal texture coordinate
-        // tv = vertical texture coordinate
-        fLength = (float)sqrt(((TempPoly->Point[0].v[0] - TempPoly->Point[3].v[0])*(TempPoly->Point[0].v[0] - TempPoly->Point[3].v[0]))+
-                              ((TempPoly->Point[0].v[2] - TempPoly->Point[3].v[2])*(TempPoly->Point[0].v[2] - TempPoly->Point[3].v[2])));
-        fHigh = (TempPoly->Point[0].v[1] - TempPoly->Point[1].v[1]);
-        GLXOff = (float)(TexList[TempPoly->Texture[0]].GLWide - TexList[TempPoly->Texture[0]].DWide) / fLength;
-        GLYOff = (float)(GLHigh - DHigh) / GLHigh;
-        YOffset = (float)(sides[TempPoly->SideDef].rowoffset >> FRACBITS);
-        if (((sides[TempPoly->SideDef].rowoffset >> FRACBITS) == 0)||(DHigh == 0))
-           fVertOff = 0.0f;
-        else
-           {
-            fVertOff = ((float)(sides[TempPoly->SideDef].rowoffset >> FRACBITS) / DHigh)*-1.0f;
-           }
-        while (fVertOff < 0.0f)
-           fVertOff += 1.0f;
-        if (((sides[TempPoly->SideDef].textureoffset >> FRACBITS) == 0)||(TexList[TempPoly->Texture[0]].DWide == 0))
-           fHorzOff = 0.0f;
-        else
-           {
-            fHorzOff = ((float)(sides[TempPoly->SideDef].textureoffset >> FRACBITS) / (float)TexList[TempPoly->Texture[0]].DWide);
-           }
-        while (fHorzOff < 0.0f)
-           fHorzOff += 1.0f;
+                // tu = horizontal texture coordinate
+                // tv = vertical texture coordinate
+                fLength = (float)sqrt(((TempPoly->Point[0].v[0] - TempPoly->Point[3].v[0]) * (TempPoly->Point[0].v[0] - TempPoly->Point[3].v[0])) +
+                    ((TempPoly->Point[0].v[2] - TempPoly->Point[3].v[2]) * (TempPoly->Point[0].v[2] - TempPoly->Point[3].v[2])));
+                fHigh = (TempPoly->Point[0].v[1] - TempPoly->Point[1].v[1]);
+                GLXOff = (float)(TexList[TempPoly->Texture[0]].GLWide - TexList[TempPoly->Texture[0]].DWide) / fLength;
+                GLYOff = (float)(GLHigh - DHigh) / GLHigh;
+                YOffset = (float)(sides[TempPoly->SideDef].rowoffset >> FRACBITS);
+                if (((sides[TempPoly->SideDef].rowoffset >> FRACBITS) == 0) || (DHigh == 0))
+                    fVertOff = 0.0f;
+                else
+                {
+                    fVertOff = ((float)(sides[TempPoly->SideDef].rowoffset >> FRACBITS) / DHigh) * -1.0f;
+                }
+                while (fVertOff < 0.0f)
+                    fVertOff += 1.0f;
+                if (((sides[TempPoly->SideDef].textureoffset >> FRACBITS) == 0) || (TexList[TempPoly->Texture[0]].DWide == 0))
+                    fHorzOff = 0.0f;
+                else
+                {
+                    fHorzOff = ((float)(sides[TempPoly->SideDef].textureoffset >> FRACBITS) / (float)TexList[TempPoly->Texture[0]].DWide);
+                }
+                while (fHorzOff < 0.0f)
+                    fHorzOff += 1.0f;
 
-        TempPoly->Point[0].tu = 0.0f + fHorzOff;
-        switch(TempPoly->Position)
-           { // line_t
-            case DW_UPPER:
-                 if ((lines[TempPoly->LineDef].flags & DW_UPUNPEG) == DW_UPUNPEG)
-                     TempPoly->Point[0].tv = 1.0f + fVertOff;
-                 else
-                     TempPoly->Point[0].tv = (((fHigh / DHigh) + fVertOff) * YRatio) + GLYOff;
-                 break;
+                TempPoly->Point[0].tu = 0.0f + fHorzOff;
+                switch (TempPoly->Position)
+                { // line_t
+                case DW_UPPER:
+                    if ((lines[TempPoly->LineDef].flags & DW_UPUNPEG) == DW_UPUNPEG)
+                        TempPoly->Point[0].tv = 1.0f + fVertOff;
+                    else
+                        TempPoly->Point[0].tv = (((fHigh / DHigh) + fVertOff) * YRatio) + GLYOff;
+                    break;
 
-            case DW_MIDDLE:
-                 if ((lines[TempPoly->LineDef].flags & DW_LWUNPEG) == DW_LWUNPEG)
-                     TempPoly->Point[0].tv = (fHigh/DHigh) + fVertOff;
-                 else
+                case DW_MIDDLE:
+                    if ((lines[TempPoly->LineDef].flags & DW_LWUNPEG) == DW_LWUNPEG)
+                        TempPoly->Point[0].tv = (fHigh / DHigh) + fVertOff;
+                    else
                     {
-                     YPos = YOffset;
-                     TempPoly->Point[0].tv = 1.0f - (YPos / GLHigh);
+                        YPos = YOffset;
+                        TempPoly->Point[0].tv = 1.0f - (YPos / GLHigh);
                     }
-                 break;
+                    break;
 
-            case DW_LOWER:
-                 if ((lines[TempPoly->LineDef].flags & DW_LWUNPEG) == DW_LWUNPEG)
+                case DW_LOWER:
+                    if ((lines[TempPoly->LineDef].flags & DW_LWUNPEG) == DW_LWUNPEG)
                     {
-                     UnPegOff = (float)((sectors[sides[TempPoly->SideDef].sectornumb].ceilingheight >> FRACBITS)- TempPoly->Point[0].v[1])/GLHigh;
-                     while (UnPegOff > 1.0f)
-                        UnPegOff -= 1.0f;
-                     UnPegOff = 1.0f - UnPegOff;
-                     TempPoly->Point[0].tv = UnPegOff + fVertOff;
+                        UnPegOff = (float)((sectors[sides[TempPoly->SideDef].sectornumb].ceilingheight >> FRACBITS) - TempPoly->Point[0].v[1]) / GLHigh;
+                        while (UnPegOff > 1.0f)
+                            UnPegOff -= 1.0f;
+                        UnPegOff = 1.0f - UnPegOff;
+                        TempPoly->Point[0].tv = UnPegOff + fVertOff;
                     }
-                 else
-                    TempPoly->Point[0].tv = 1.0f + fVertOff;
-                 break;
-           }
+                    else
+                        TempPoly->Point[0].tv = 1.0f + fVertOff;
+                    break;
+                }
 
-        TempPoly->Point[1].tu = TempPoly->Point[0].tu;
-        switch(TempPoly->Position)
-           {
-            case DW_UPPER:
-                 if ((lines[TempPoly->LineDef].flags & DW_UPUNPEG) == DW_UPUNPEG)
-                     TempPoly->Point[1].tv = (1.0f - (fHigh / GLHigh)) + fVertOff;
-                 else
-                     TempPoly->Point[1].tv = 0.0f + fVertOff + GLYOff;
-                 break;
+                TempPoly->Point[1].tu = TempPoly->Point[0].tu;
+                switch (TempPoly->Position)
+                {
+                case DW_UPPER:
+                    if ((lines[TempPoly->LineDef].flags & DW_UPUNPEG) == DW_UPUNPEG)
+                        TempPoly->Point[1].tv = (1.0f - (fHigh / GLHigh)) + fVertOff;
+                    else
+                        TempPoly->Point[1].tv = 0.0f + fVertOff + GLYOff;
+                    break;
 
-            case DW_MIDDLE:
-                 if ((lines[TempPoly->LineDef].flags & DW_LWUNPEG) == DW_LWUNPEG)
-                     TempPoly->Point[1].tv = ((GLHigh-DHigh)/GLHigh) + fVertOff;
-                 else
+                case DW_MIDDLE:
+                    if ((lines[TempPoly->LineDef].flags & DW_LWUNPEG) == DW_LWUNPEG)
+                        TempPoly->Point[1].tv = ((GLHigh - DHigh) / GLHigh) + fVertOff;
+                    else
                     {
-                     YPos = fHigh + YOffset;
-                     TempPoly->Point[1].tv = (1.0f - (YPos / GLHigh));
+                        YPos = fHigh + YOffset;
+                        TempPoly->Point[1].tv = (1.0f - (YPos / GLHigh));
                     }
-                 break;
+                    break;
 
-            case DW_LOWER:
-                 if ((lines[TempPoly->LineDef].flags & DW_LWUNPEG) == DW_LWUNPEG)
+                case DW_LOWER:
+                    if ((lines[TempPoly->LineDef].flags & DW_LWUNPEG) == DW_LWUNPEG)
                     {
-                     UnPegOff = TempPoly->Point[0].tv - ((TempPoly->Point[0].v[1] - TempPoly->Point[1].v[1])/GLHigh);
-                     TempPoly->Point[1].tv = UnPegOff;
+                        UnPegOff = TempPoly->Point[0].tv - ((TempPoly->Point[0].v[1] - TempPoly->Point[1].v[1]) / GLHigh);
+                        TempPoly->Point[1].tv = UnPegOff;
                     }
-                 else
-                    TempPoly->Point[1].tv = (1.0f - (fHigh / GLHigh)) + fVertOff;
-           }
+                    else
+                        TempPoly->Point[1].tv = (1.0f - (fHigh / GLHigh)) + fVertOff;
+                }
 
-        TempPoly->Point[2].tu = (fLength / (float)TexList[TempPoly->Texture[0]].DWide) + fHorzOff;
-        TempPoly->Point[2].tv = TempPoly->Point[1].tv;
+                TempPoly->Point[2].tu = (fLength / (float)TexList[TempPoly->Texture[0]].DWide) + fHorzOff;
+                TempPoly->Point[2].tv = TempPoly->Point[1].tv;
 
-        TempPoly->Point[3].tu = TempPoly->Point[2].tu;
-        TempPoly->Point[3].tv = TempPoly->Point[0].tv;
-        TempPoly = TempPoly->Next;
-       }
+                TempPoly->Point[3].tu = TempPoly->Point[2].tu;
+                TempPoly->Point[3].tv = TempPoly->Point[0].tv;
+            }
+            TempPoly = TempPoly->Next;
+        }
+    }
 
     for (sector = 0; sector < numsectors; sector++)
        {

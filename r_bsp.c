@@ -44,6 +44,13 @@ rcsid[] = "$Id: r_bsp.c,v 1.4 1997/02/03 22:45:12 b1 Exp $";
 
 //#include "r_local.h"
 
+extern int              sorted_flats_count, sorted_walls_count;
+extern sector_plane_t** sorted_flats;
+extern DW_Polygon**     sorted_walls;
+extern DW_Polygon**     side_polygons;
+extern sector_plane_t*  planes;
+
+
 seg_t*		curline;
 side_t*		sidedef;
 line_t*		linedef;
@@ -267,6 +274,7 @@ void R_AddLine (seg_t*	line)
     angle_t		span;
     angle_t		tspan;
     int         subsector;
+    int         side;
     //float       fangle1, fangle2, vangle;
 
     curline = line;
@@ -382,7 +390,14 @@ void R_AddLine (seg_t*	line)
 */
 	
     backsector = line->backsector;
-    DrawSide[line->sidedef-sides] = ds_draw;
+    side       = line->sidedef - sides;
+    if (DrawSide[side] == ds_unknown)
+    {
+        sorted_walls[sorted_walls_count++] = side_polygons[side];
+
+        DrawSide[side] = ds_draw;
+    }
+
 
     // Single sided line?
     if (!backsector)
@@ -562,9 +577,9 @@ dboolean R_CheckBBox (fixed_t*	bspcoord)
 //
 void R_Subsector (int num)
 {
-    int			count;
-    seg_t*		line;
-    subsector_t*	sub;
+    int			  count, sector;
+    seg_t*		  line;
+    subsector_t*  sub;
 	
 #ifdef RANGECHECK
     if (num >= numsubsectors)
@@ -590,16 +605,23 @@ void R_Subsector (int num)
        }
     else
         ceilingplane = NULL;
-		
-    DrawFlat[frontsector - sectors] = true;
+	
+    sector = frontsector - sectors;
+    if (!DrawFlat[sector])
+    {
+        sorted_flats[sorted_flats_count++] = planes + sector;
+
+        DrawFlat[sector] = true;
+    }
+
     R_AddSprites (frontsector);	
 
     while (count--)
-       {
+    {
         R_AddLine (line);
         line++;
-       }
-   }
+    }
+}
 
 
 

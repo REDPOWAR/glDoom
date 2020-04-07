@@ -54,6 +54,10 @@ static const char rcsid[] = "$Id: r_main.c,v 1.5 1997/02/03 22:45:12 b1 Exp $";
 
 extern float SetBack, glLeft, glTop, glRight, glBottom;
 
+extern int              sorted_flats_count, sorted_walls_count;
+extern sector_plane_t** sorted_flats;
+extern DW_Polygon**     sorted_walls;
+
 video_t  video;
 
 int			viewangleoffset;
@@ -1575,8 +1579,8 @@ dboolean R_ClipVertsToFrustum(DW_Polygon *TempPoly)
    }
 
 void R_BuildRenderQueue()
-   {
-    int           i, texnumb;
+{
+    int           i, texnumb, wall;
     dboolean       inside;
     DW_Polygon   *TempPoly;
     float         wallhigh, newhigh;
@@ -1589,111 +1593,107 @@ void R_BuildRenderQueue()
     // a common vertex pool would be quicker
     // for culling
 
-    TempPoly = PolyList;
-    while (TempPoly != 0)
+    for (wall = 0; wall < sorted_walls_count; wall++)
     {
-        // Check left and right sides for inside the frustum
-        //inside = (DrawSide[TempPoly->SideDef] == ds_draw);
-        inside = R_ClipVertsToFrustum(TempPoly);
-
-        if (inside && DrawSide[TempPoly->SideDef] == ds_draw)
+        TempPoly = sorted_walls[wall];
+        while (TempPoly != NULL)
         {
-            wallhigh = TempPoly->Point[0].v[1] - TempPoly->Point[1].v[1];
-            switch(TempPoly->Position)
-               {
+            // Check left and right sides for inside the frustum
+            //inside = (DrawSide[TempPoly->SideDef] == ds_draw);
+            inside = R_ClipVertsToFrustum(TempPoly);
+
+            if (inside && DrawSide[TempPoly->SideDef] == ds_draw)
+            {
+                wallhigh = TempPoly->Point[0].v[1] - TempPoly->Point[1].v[1];
+                switch (TempPoly->Position)
+                {
                 case DW_LOWER:
-                     ch = (double)sectors[TempPoly->BackSector].floorheight*pfactor;
-                     TempPoly->Point[0].v[1] = ch;
-                     TempPoly->Point[3].v[1] = ch;
-                     fh = (double)sectors[TempPoly->Sector].floorheight*pfactor;
-                     TempPoly->Point[1].v[1] = fh;
-                     TempPoly->Point[2].v[1] = fh;
-                     break;
+                    ch = (double)sectors[TempPoly->BackSector].floorheight * pfactor;
+                    TempPoly->Point[0].v[1] = ch;
+                    TempPoly->Point[3].v[1] = ch;
+                    fh = (double)sectors[TempPoly->Sector].floorheight * pfactor;
+                    TempPoly->Point[1].v[1] = fh;
+                    TempPoly->Point[2].v[1] = fh;
+                    break;
                 case DW_MIDDLE:
-                     if (TempPoly->BackSector != -1)
+                    if (TempPoly->BackSector != -1)
+                    {
+                        if (sectors[TempPoly->Sector].ceilingheight > sectors[TempPoly->BackSector].ceilingheight)
+                            ch = (double)sectors[TempPoly->BackSector].ceilingheight * pfactor;
+                        else
+                            ch = (double)sectors[TempPoly->Sector].ceilingheight * pfactor;
+
+                        if ((sectors[TempPoly->Sector].floorheight > sectors[TempPoly->BackSector].floorheight) ||
+                            (sides[TempPoly->SideDef].bottomtexture == 0))
+                            fh = (double)sectors[TempPoly->Sector].floorheight * pfactor;
+                        else
+                            fh = (double)sectors[TempPoly->BackSector].floorheight * pfactor;
+                    }
+                    else
+                    {
+                        ch = (double)sectors[TempPoly->Sector].ceilingheight * pfactor;
+                        fh = (double)sectors[TempPoly->Sector].floorheight * pfactor;
+                    }
+                    if (TexList[TempPoly->Texture[0]].Transparent == true)
+                    {
+                        if (TexList[TempPoly->Texture[0]].DHigh < (ch - fh))
                         {
-                         if (sectors[TempPoly->Sector].ceilingheight > sectors[TempPoly->BackSector].ceilingheight)
-                            {
-                             ch = (double)sectors[TempPoly->BackSector].ceilingheight*pfactor;
-                            }
-                         else
-                            {
-                             ch = (double)sectors[TempPoly->Sector].ceilingheight*pfactor;
-                            }
-                         if ((sectors[TempPoly->Sector].floorheight > sectors[TempPoly->BackSector].floorheight) ||
-                             (sides[TempPoly->SideDef].bottomtexture == 0))
-                            {
-                             fh = (double)sectors[TempPoly->Sector].floorheight*pfactor;
-                            }
-                         else
-                            {
-                             fh = (double)sectors[TempPoly->BackSector].floorheight*pfactor;
-                            }
+                            if ((lines[TempPoly->LineDef].flags & DW_LWUNPEG) != DW_LWUNPEG)
+                                fh = ch - TexList[TempPoly->Texture[0]].DHigh;
+                            else
+                                ch = fh + TexList[TempPoly->Texture[0]].DHigh;
+
                         }
-                     else
-                        {
-                         ch = (double)sectors[TempPoly->Sector].ceilingheight*pfactor;
-                         fh = (double)sectors[TempPoly->Sector].floorheight*pfactor;
-                        }
-                     if (TexList[TempPoly->Texture[0]].Transparent == true)
-                        {
-                         if (TexList[TempPoly->Texture[0]].DHigh < (ch - fh))
-                            {
-                             if ((lines[TempPoly->LineDef].flags & DW_LWUNPEG) != DW_LWUNPEG)
-                                {
-                                 fh = ch - TexList[TempPoly->Texture[0]].DHigh;
-                                }
-                             else
-                                {
-                                 ch = fh + TexList[TempPoly->Texture[0]].DHigh;
-                                }
-                            }
-                        }
-                     TempPoly->Point[0].v[1] = ch;
-                     TempPoly->Point[3].v[1] = ch;
-                     TempPoly->Point[1].v[1] = fh;
-                     TempPoly->Point[2].v[1] = fh;
-                     break;
+                    }
+                    TempPoly->Point[0].v[1] = ch;
+                    TempPoly->Point[3].v[1] = ch;
+                    TempPoly->Point[1].v[1] = fh;
+                    TempPoly->Point[2].v[1] = fh;
+                    break;
                 case DW_UPPER:
-                     ch = (double)sectors[TempPoly->Sector].ceilingheight*pfactor;
-                     TempPoly->Point[0].v[1] = ch;
-                     TempPoly->Point[3].v[1] = ch;
-                     fh = (double)sectors[TempPoly->BackSector].ceilingheight*pfactor;
-                     TempPoly->Point[1].v[1] = fh;
-                     TempPoly->Point[2].v[1] = fh;
-                     break;
-               }
-            newhigh = TempPoly->Point[0].v[1] - TempPoly->Point[1].v[1];
-           }
+                    ch = (double)sectors[TempPoly->Sector].ceilingheight * pfactor;
+                    TempPoly->Point[0].v[1] = ch;
+                    TempPoly->Point[3].v[1] = ch;
+                    fh = (double)sectors[TempPoly->BackSector].ceilingheight * pfactor;
+                    TempPoly->Point[1].v[1] = fh;
+                    TempPoly->Point[2].v[1] = fh;
+                    break;
+                default:
+                    TempPoly->Point[1].v[1] = TempPoly->Point[2].v[1] = (double)sectors[TempPoly->BackSector].ceilingheight * pfactor;
+                    break;
+                }
+                newhigh = TempPoly->Point[0].v[1] - TempPoly->Point[1].v[1];
+            }
 
-        //inside = R_IsVisibleVertical(TempPoly);
-        
-        if (inside)
-           {
-            // calculate new vertical texture coordinates for vertical "flats" motion
-            if (wallhigh != newhigh)
-               {
-                FixWallCoords(TempPoly);
-               }
-            // handle scrolling horizontal textures
-            if (TempPoly->coloff != sides[TempPoly->SideDef].textureoffset)
-               {
-                FixWallHorzCoords(TempPoly);
-                TempPoly->coloff = sides[TempPoly->SideDef].textureoffset;
-               }
-           }
+            //inside = R_IsVisibleVertical(TempPoly);
 
-        if (!inside)
-            DrawSide[TempPoly->SideDef] = ds_nodraw;
+            if (inside && TempPoly->Position)
+            {
+                // calculate new vertical texture coordinates for vertical "flats" motion
+                if (wallhigh != newhigh)
+                {
+                    FixWallCoords(TempPoly);
+                }
+                // handle scrolling horizontal textures
+                if (TempPoly->coloff != sides[TempPoly->SideDef].textureoffset)
+                {
+                    FixWallHorzCoords(TempPoly);
+                    TempPoly->coloff = sides[TempPoly->SideDef].textureoffset;
+                }
+            }
 
-        TempPoly = TempPoly->Next;
-       }
-   }
+            if (!inside)
+                DrawSide[TempPoly->SideDef] = ds_nodraw;
+
+            TempPoly = TempPoly->Next;
+        }
+    }
+ }
 
 
 void GL_RenderPlayerView(player_t* player)
    {
-    int           i, j, iview, texnumb, sector, subsector, lin;
+    int           i, j, iview, texnumb, sector, subsector, lin, wall, flat;
     float         wallhigh, newhigh;
     double        fview;
     float         yangle, lightv;
@@ -1707,8 +1707,10 @@ void GL_RenderPlayerView(player_t* player)
     static dboolean   FirstTime = true;
     DW_Vertex3D   LightPos;
     mobj_t* pobj;
-    DW_FloorCeil* psubsector;
-    sector_t* psector;
+
+    DW_FloorCeil*   psubsector;
+    sector_t*       psector;
+    sector_plane_t* pplane;
 
     glPushMatrix();
 
@@ -1760,255 +1762,95 @@ void GL_RenderPlayerView(player_t* player)
 
     glTranslatef( ViewPosition[0], ViewPosition[1], ViewPosition[2]);
 
-    TempPoly = PolyList;
-    while (TempPoly != 0)
-       {
-        if (DrawSide[TempPoly->SideDef] == ds_draw)
-           {
-            lightv = sectors[TempPoly->LSector].lightlevel;
-            lightv /= 255.0f;
-            if (WhiteBias == true)
-               {
-                lightv = 1.0f;
-               }
-            glColor4f( lightv, lightv, lightv, 1.0f );
-            if ((lightv >= foglight) && (gl_fog == 1))
-               {
-                glDisable(GL_FOG);
-               }
-            switch(TempPoly->Position)
-               {
-                case DW_LOWER:
-                     texnumb = sides[TempPoly->SideDef].bottomtexture;
-                     break;
-                case DW_MIDDLE:
-                     texnumb = sides[TempPoly->SideDef].midtexture;
-                     break;
-                case DW_UPPER:
-                     texnumb = sides[TempPoly->SideDef].toptexture;
-                     break;
-               }
-/*
-            wallhigh = TempPoly->Point[0].v[1] - TempPoly->Point[1].v[1];
-            switch(TempPoly->Position)
-               {
-                case DW_LOWER:
-                     texnumb = sides[TempPoly->SideDef].bottomtexture;
-                     ch = (double)sectors[TempPoly->BackSector].floorheight*pfactor;
-                     TempPoly->Point[0].v[1] = ch;
-                     TempPoly->Point[3].v[1] = ch;
-                     fh = (double)sectors[TempPoly->Sector].floorheight*pfactor;
-                     TempPoly->Point[1].v[1] = fh;
-                     TempPoly->Point[2].v[1] = fh;
-                     break;
-                case DW_MIDDLE:
-                     texnumb = sides[TempPoly->SideDef].midtexture;
-                     if (TempPoly->BackSector != -1)
-                        {
-                         if (sectors[TempPoly->Sector].ceilingheight > sectors[TempPoly->BackSector].ceilingheight)
-                            {
-                             ch = (double)sectors[TempPoly->BackSector].ceilingheight*pfactor;
-                            }
-                         else
-                            {
-                             ch = (double)sectors[TempPoly->Sector].ceilingheight*pfactor;
-                            }
-                         if ((sectors[TempPoly->Sector].floorheight > sectors[TempPoly->BackSector].floorheight) ||
-                             (sides[TempPoly->SideDef].bottomtexture == 0))
-                            {
-                             fh = (double)sectors[TempPoly->Sector].floorheight*pfactor;
-                            }
-                         else
-                            {
-                             fh = (double)sectors[TempPoly->BackSector].floorheight*pfactor;
-                            }
-                        }
-                     else
-                        {
-                         ch = (double)sectors[TempPoly->Sector].ceilingheight*pfactor;
-                         fh = (double)sectors[TempPoly->Sector].floorheight*pfactor;
-                        }
-                     if (TexList[TempPoly->Texture[0]].Transparent == true)
-                        {
-                         if (TexList[TempPoly->Texture[0]].DHigh < (ch - fh))
-                            {
-                             if ((lines[TempPoly->LineDef].flags & DW_LWUNPEG) != DW_LWUNPEG)
-                                {
-                                 fh = ch - TexList[TempPoly->Texture[0]].DHigh;
-                                }
-                             else
-                                {
-                                 ch = fh + TexList[TempPoly->Texture[0]].DHigh;
-                                }
-                            }
-                        }
-                     TempPoly->Point[0].v[1] = ch;
-                     TempPoly->Point[3].v[1] = ch;
-                     TempPoly->Point[1].v[1] = fh;
-                     TempPoly->Point[2].v[1] = fh;
-                     break;
-                case DW_UPPER:
-                     texnumb = sides[TempPoly->SideDef].toptexture;
-                     ch = (double)sectors[TempPoly->Sector].ceilingheight*pfactor;
-                     TempPoly->Point[0].v[1] = ch;
-                     TempPoly->Point[3].v[1] = ch;
-                     fh = (double)sectors[TempPoly->BackSector].ceilingheight*pfactor;
-                     TempPoly->Point[1].v[1] = fh;
-                     TempPoly->Point[2].v[1] = fh;
-                     break;
-               }
-            newhigh = TempPoly->Point[0].v[1] - TempPoly->Point[1].v[1];
-            if (wallhigh != newhigh) // calculate new vertical texture coordinates
-               {
-                FixWallCoords(TempPoly);
-               }
+    for (wall = 0; wall < sorted_walls_count; wall++)
+    {
+        TempPoly = sorted_walls[wall];
+        while (TempPoly != NULL)
+        {
+            if (DrawSide[TempPoly->SideDef] == ds_draw)
+            {
+                if (TempPoly->Position)
+                {
+                    lightv = sectors[TempPoly->LSector].lightlevel;
+                    lightv /= 255.0f;
+                    if (WhiteBias == true)
+                        lightv = 1.0f;
 
-            if (TempPoly->coloff != sides[TempPoly->SideDef].textureoffset)
-               {
-                FixWallHorzCoords(TempPoly);
-                TempPoly->coloff = sides[TempPoly->SideDef].textureoffset;
-               }
+                    glColor4f(lightv, lightv, lightv, 1.0f);
+                    if ((lightv >= foglight) && (gl_fog == 1))
+                        glDisable(GL_FOG);
 
-*/
-/*
-            if ((TempPoly->SideDef == 419) && (WhiteBias == false))
-               {
-                float top, bottom;
+                    switch (TempPoly->Position)
+                    {
+                    case DW_LOWER:
+                        texnumb = sides[TempPoly->SideDef].bottomtexture;
+                        break;
+                    case DW_MIDDLE:
+                        texnumb = sides[TempPoly->SideDef].midtexture;
+                        break;
+                    case DW_UPPER:
+                        texnumb = sides[TempPoly->SideDef].toptexture;
+                        break;
+                    }
 
-                LightPos.x = 2928;
-                LightPos.y = 32;
-                LightPos.z = 4528;
 
-                //CheckXZAltitude(TempPoly, &LightPos, &LightMap, radius );
+                    glBindTexture(GL_TEXTURE_2D, TexList[translate[texturetranslation[texnumb]]].glTexture);
 
-                //glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+                    if (TexList[TempPoly->Texture[0]].Transparent == true)
+                    {
+                        glEnable(GL_ALPHA_TEST);
+                        glAlphaFunc(GL_GREATER, 0.0f);
+                    }
 
-                glBindTexture(GL_TEXTURE_2D, WhiteColorMap);
-                lightv = (sectors[TempPoly->LSector].lightlevel/2);
-                lightv /= 255.0f;
+                    glBegin(GL_QUADS);
+                    glTexCoord2f(TempPoly->Point[0].tu, TempPoly->Point[0].tv);
+                    glVertex3fv(TempPoly->Point[0].v);
+                    glTexCoord2f(TempPoly->Point[1].tu, TempPoly->Point[1].tv);
+                    glVertex3fv(TempPoly->Point[1].v);
+                    glTexCoord2f(TempPoly->Point[2].tu, TempPoly->Point[2].tv);
+                    glVertex3fv(TempPoly->Point[2].v);
+                    glTexCoord2f(TempPoly->Point[3].tu, TempPoly->Point[3].tv);
+                    glVertex3fv(TempPoly->Point[3].v);
+                    glEnd();
 
-                glDepthMask(false);
+                    if (TexList[TempPoly->Texture[0]].Transparent == true)
+                        glDisable(GL_ALPHA_TEST);
 
-                glColor3f(lightv, lightv, lightv);
 
-                glBegin(GL_QUADS);
-                   glTexCoord2f( 0.0f, 1.0f );
-                   glVertex3fv(TempPoly->Point[0].v);
-                   glTexCoord2f( 0.0f, 0.0f );
-                   glVertex3fv(TempPoly->Point[1].v);
-                   glTexCoord2f( 1.0f, 0.0f );
-                   glVertex3fv(TempPoly->Point[2].v);
-                   glTexCoord2f( 1.0f, 1.0f );
-                   glVertex3fv(TempPoly->Point[3].v);
-                glEnd();
+                    if ((lightv >= foglight) && (gl_fog == 1))
+                        glEnable(GL_FOG);
 
-                //lightv = sectors[TempPoly->LSector].lightlevel;
-                //lightv /= 255.0f;
-                lightv = 1.0f;
-                glColor3f(lightv, lightv, lightv);
-                //glDisable( GL_DEPTH_TEST );
+                }
+                else
+                {
+                    if (gl_fog == 1)
+                        glDisable(GL_FOG);
 
-                glEnable(GL_ALPHA_TEST);
-                glAlphaFunc(GL_GREATER, 0.0f);
-                glEnable( GL_BLEND );
-                glBlendFunc( GL_DST_COLOR, GL_SRC_COLOR );
-                //glBlendFunc( GL_ONE, GL_ZERO );
+                    glDisable(GL_TEXTURE_2D);
+                    glEnable(GL_BLEND);
+                    glBlendFunc(GL_ZERO, GL_ONE);
 
-                //glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_BLEND);
-                glBindTexture(GL_TEXTURE_2D, WhiteLightMap);
+                    glColor4f(0.0f, 0.0, 0.0, 0.0f);
 
-                glBegin(GL_QUADS);
-                   glTexCoord2f( 0.4375f, 0.5625f);
-                   glVertex3f(2944.0f, 48.0f, 4544.0f);
-                   glTexCoord2f( 0.4375f, 0.28125f);
-                   glVertex3f(2944.0f,  -24.0f, 4544.0f);
-                   glTexCoord2f( 1.0f, 0.28125f);
-                   glVertex3f(2800.0f,  -24.0f, 4544.0f);
-                   glTexCoord2f( 1.0f, 0.5625f);
-                   glVertex3f(2800.0f, 48.0f, 4544.0f);
-                glEnd();
+                    glBegin(GL_QUADS);
+                    glVertex3fv(TempPoly->Point[0].v);
+                    glVertex3fv(TempPoly->Point[1].v);
+                    glVertex3fv(TempPoly->Point[2].v);
+                    glVertex3fv(TempPoly->Point[3].v);
+                    glEnd();
 
-                //glDisable( GL_DEPTH_TEST );
-                glDisable(GL_ALPHA_TEST);
-                glEnable( GL_BLEND );
-                glBlendFunc( GL_DST_COLOR, GL_SRC_COLOR );
-                //glColor3f( 1.0f, 1.0f, 1.0f );
-                glDepthMask(true);
-               }
-*/
+                    glEnable(GL_TEXTURE_2D);
+                    glDisable(GL_BLEND);
 
-            glBindTexture(GL_TEXTURE_2D, TexList[translate[texturetranslation[texnumb]]].glTexture);
 
-            if (TexList[TempPoly->Texture[0]].Transparent == true)
-               {
-                glEnable(GL_ALPHA_TEST);
-                glAlphaFunc(GL_GREATER, 0.0f);
-               }
-            //if ((TempPoly->SideDef == 419) && (WhiteBias == false))
-               //{
-                //glDepthMask(false);
-                //glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
-               //}
+                    if (gl_fog == 1)
+                        glEnable(GL_FOG);
+                }
 
-            glBegin(GL_QUADS);
-               glTexCoord2f( TempPoly->Point[0].tu, TempPoly->Point[0].tv);
-               //glVertex3fv(v[0]);
-               glVertex3fv(TempPoly->Point[0].v);
-               glTexCoord2f( TempPoly->Point[1].tu, TempPoly->Point[1].tv);
-               //glVertex3fv(v[1]);
-               glVertex3fv(TempPoly->Point[1].v);
-               glTexCoord2f( TempPoly->Point[2].tu, TempPoly->Point[2].tv);
-               //glVertex3fv(v[2]);
-               glVertex3fv(TempPoly->Point[2].v);
-               glTexCoord2f( TempPoly->Point[3].tu, TempPoly->Point[3].tv);
-               //glVertex3fv(v[3]);
-               glVertex3fv(TempPoly->Point[3].v);
-            glEnd();
-
-/*
-            if ((TempPoly->SideDef == 419) && (WhiteBias == false))
-               {
-//
-                glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_BLEND);
-                //glDepthMask(true);
-                //glDisable(GL_DEPTH_TEST);
-                glEnable(GL_ALPHA_TEST);
-                glAlphaFunc(GL_GREATER, 0.0f);
-                glEnable( GL_BLEND );
-                glBlendFunc( GL_DST_COLOR, GL_SRC_COLOR );
-                glBindTexture(GL_TEXTURE_2D, WhiteLightMap);
-                glColor3f(1.0f, 1.0f, 1.0f);
-                glBegin(GL_QUADS);
-                   glTexCoord2f( 0.4375f, 0.5625f);
-                   glVertex3f(2944.0f, 48.0f, 4544.0f);
-                   glTexCoord2f( 0.4375f, 0.28125f);
-                   glVertex3f(2944.0f,  -24.0f, 4544.0f);
-                   glTexCoord2f( 1.0f, 0.28125f);
-                   glVertex3f(2800.0f,  -24.0f, 4544.0f);
-                   glTexCoord2f( 1.0f, 0.5625f);
-                   glVertex3f(2800.0f, 48.0f, 4544.0f);
-                glEnd();
-                glDisable(GL_ALPHA_TEST);
-//
-                glDisable(GL_BLEND);
-                //glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
-                //glEnable( GL_DEPTH_TEST );
-               }
-*/
-
-            if (TexList[TempPoly->Texture[0]].Transparent == true)
-               {
-                glDisable(GL_ALPHA_TEST);
-               }
-            if ((lightv >= foglight) && (gl_fog == 1))
-               {
-                glEnable(GL_FOG);
-               }
-           }
-        TempPoly = TempPoly->Next;
-       }
-    for (i = 0; i < numsides; i++)
-       DrawSide[i] = ds_unknown;
+            }
+            TempPoly = TempPoly->Next;
+        }
+    }
 
     glDisable(GL_CULL_FACE);
 
@@ -2018,9 +1860,13 @@ void GL_RenderPlayerView(player_t* player)
     offsetf = (double)gl_poffsetf * div255;
     offsetu = (double)gl_poffsetu * div255;
 
-    for (sector = 0, psector = sectors; sector < numsectors; sector++, psector++)
+    for(flat = 0; flat < sorted_flats_count; flat++)
     {
-        if (DrawFlat[sector] && psector->floorheight != psector->ceilingheight)
+        pplane  = sorted_flats[flat];
+        sector  = pplane - planes;
+        psector = sectors + sector;
+
+        if (psector->floorheight != psector->ceilingheight)
         {
             glPolygonOffset(offsetf,offsetu);
 
@@ -2039,9 +1885,9 @@ void GL_RenderPlayerView(player_t* player)
                     glColor4f( lightv, lightv, lightv, 1.0f );
        
                 glBindTexture(GL_TEXTURE_2D, TexList[ftranslate[flattranslation[psector->floorpic]]].glTexture);
-                for (subsector = 0; subsector < planes[sector].ss_count; subsector++)
+                for (subsector = 0; subsector < pplane->ss_count; subsector++)
                 {
-                    psubsector = planes[sector].subsectors[subsector];
+                    psubsector = pplane->subsectors[subsector];
 
                     if (psector->floorpic == skyflatnum)
                         continue;
@@ -2093,9 +1939,9 @@ void GL_RenderPlayerView(player_t* player)
                     glColor4f(lightv, lightv, lightv, 1.0f);
            
                 glBindTexture(GL_TEXTURE_2D, TexList[ftranslate[flattranslation[psector->ceilingpic]]].glTexture);
-                for (subsector = 0; subsector < planes[sector].ss_count; subsector++)
+                for (subsector = 0; subsector < pplane->ss_count; subsector++)
                 {
-                    psubsector = planes[sector].subsectors[subsector];
+                    psubsector = pplane->subsectors[subsector];
 
                     if (psector->ceilingpic == skyflatnum)
                         continue;
@@ -2135,8 +1981,6 @@ void GL_RenderPlayerView(player_t* player)
         }
 
     }
-
-    ZeroMemory(DrawFlat, sizeof(dboolean) * numsectors);
 
     if (gl_modeltest)
        {
@@ -2228,7 +2072,7 @@ void R_CheckSides()
 // R_RenderView
 //
 void R_RenderPlayerView (player_t* player)
-   {	
+{	
     R_SetupFrame(player);
 
     // Clear buffers.
@@ -2241,6 +2085,11 @@ void R_RenderPlayerView (player_t* player)
 
     // check for new console commands.
     NetUpdate ();
+
+    ZeroMemory(DrawFlat, sizeof(dboolean) * numsectors);
+    ZeroMemory(DrawSide, sizeof(drawside_t) * numsides);
+    sorted_flats_count = 0;
+    sorted_walls_count = 0;
 
     // The head node is the last node output.
     R_RenderBSPNode (numnodes-1);
